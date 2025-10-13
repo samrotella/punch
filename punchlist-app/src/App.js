@@ -1,16 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail } from 'lucide-react';
+import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail, LogOut, FolderPlus, Folder } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 export default function PunchListApp() {
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [currentProject, setCurrentProject] = useState(null);
   const [items, setItems] = useState([]);
-  const [view, setView] = useState('list'); // 'list' or 'create'
+  const [view, setView] = useState('list');
+  const [authView, setAuthView] = useState('login');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [assignModal, setAssignModal] = useState(null);
   const [assignEmail, setAssignEmail] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [filterTrade, setFilterTrade] = useState('all');
+  
+  const [authForm, setAuthForm] = useState({
+    email: '',
+    password: '',
+    fullName: '',
+    role: 'gc',
+    companyName: ''
+  });
+
+  const [newProject, setNewProject] = useState({
+    name: ''
+  });
+
   const [newItem, setNewItem] = useState({
     description: '',
     location: '',
@@ -19,37 +37,175 @@ export default function PunchListApp() {
     photoFile: null,
     status: 'open'
   });
-  const fileInputRef = useRef(null);
 
+  const fileInputRef = useRef(null);
   const trades = ['General', 'Electrical', 'Plumbing', 'HVAC', 'Framing', 'Drywall', 'Painting', 'Flooring', 'Tile', 'Cabinets'];
 
   useEffect(() => {
-    loadItems();
+    checkUser();
   }, []);
 
-  const loadItems = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('punch_items')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setItems(data || []);
-    } catch (error) {
-      console.error('Error loading items:', error);
-      const stored = localStorage.getItem('punchListItems');
-      if (stored) {
-        setItems(JSON.parse(stored));
+  useEffect(() => {
+    if (user && profile) {
+      if (profile.role === 'gc') {
+        loadProjects();
+      } else {
+        loadAssignedItems();
       }
+    }
+  }, [user, profile]);
+
+  useEffect(() => {
+    if (currentProject) {
+      loadItems();
+    }
+  }, [currentProject]);
+
+  const checkUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      setUser(session.user);
+      await loadProfile(session.user.id);
+    }
+    setLoading(false);
+  };
+
+  const loadProfile = async (userId) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (data) {
+      setProfile(data);
+    }
+  };
+
+  const loadProjects = async () => {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      setProjects(data);
+    }
+  };
+
+  const loadItems = async () => {
+    if (!currentProject) return;
+
+    const { data, error } = await supabase
+      .from('punch_items')
+      .select('*')
+      .eq('project_id', currentProject.id)
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      setItems(data);
+    }
+  };
+
+  const loadAssignedItems = async () => {
+    const { data, error } = await supabase
+      .from('punch_items')
+      .select('*')
+      .eq('assigned_to', user.email)
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      setItems(data);
+    }
+  };
+
+  const signUp = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: authForm.email,
+        password: authForm.password,
+      });
+
+      if (authError) throw authError;
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([
+          {
+            id: authData.user.id,
+            email: authForm.email,
+            full_name: authForm.fullName,
+            role: authForm.role,
+            company_name: authForm.companyName
+          }
+        ]);
+
+      if (profileError) throw profileError;
+
+      alert('Account created! Please check your email to verify your account.');
+    } catch (error) {
+      alert(error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    localStorage.setItem('punchListItems', JSON.stringify(items));
-  }, [items]);
+  const signIn = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: authForm.email,
+        password: authForm.password,
+      });
+
+      if (error) throw error;
+
+      setUser(data.user);
+      await loadProfile(data.user.id);
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setProfile(null);
+    setProjects([]);
+    setCurrentProject(null);
+    setItems([]);
+  };
+
+  const createProject = async (e) => {
+    e.preventDefault();
+    
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert([
+          {
+            name: newProject.name,
+            owner_id: user.id
+          }
+        ])
+        .select();
+
+      if (error) throw error;
+
+      setProjects([data[0], ...projects]);
+      setNewProject({ name: '' });
+      setView('list');
+    } catch (error) {
+      alert(error.message);
+    }
+  };
 
   const handlePhotoCapture = (e) => {
     const file = e.target.files[0];
@@ -95,6 +251,11 @@ export default function PunchListApp() {
       return;
     }
 
+    if (!currentProject) {
+      alert('Please select a project first');
+      return;
+    }
+
     setUploading(true);
 
     try {
@@ -112,7 +273,9 @@ export default function PunchListApp() {
             location: newItem.location,
             trade: newItem.trade,
             status: 'open',
-            photo_url: photoUrl
+            photo_url: photoUrl,
+            project_id: currentProject.id,
+            created_by: user.id
           }
         ])
         .select();
@@ -182,17 +345,15 @@ export default function PunchListApp() {
 
       if (error) throw error;
 
-      // Send email notification (simple mailto for MVP)
       const subject = encodeURIComponent(`Punch List Item Assigned: ${item.trade}`);
       const body = encodeURIComponent(
         `You have been assigned a punch list item:\n\n` +
         `Trade: ${item.trade}\n` +
         `Location: ${item.location}\n` +
         `Description: ${item.description}\n\n` +
-        `Please complete this item and update the status in the punch list app.`
+        `Please log in to the punch list app to view and update this item.`
       );
       
-      // This will open the user's email client
       window.location.href = `mailto:${assignEmail}?subject=${subject}&body=${body}`;
 
       setItems(items.map(i => 
@@ -231,22 +392,245 @@ export default function PunchListApp() {
     ? items 
     : items.filter(item => item.trade === filterTrade);
 
-  if (loading) {
+  // Auth screens
+  if (!user || !profile) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <Clock className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading punch list...</p>
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+          <h1 className="text-2xl font-bold text-center mb-6">
+            {authView === 'login' ? 'Log In' : 'Sign Up'}
+          </h1>
+
+          <form onSubmit={authView === 'login' ? signIn : signUp} className="space-y-4">
+            {authView === 'signup' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={authForm.fullName}
+                    onChange={(e) => setAuthForm({ ...authForm, fullName: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    I am a...
+                  </label>
+                  <div className="flex gap-4">
+                    <label className="flex-1 flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer hover:bg-blue-50 transition-colors">
+                      <input
+                        type="radio"
+                        name="role"
+                        value="gc"
+                        checked={authForm.role === 'gc'}
+                        onChange={(e) => setAuthForm({ ...authForm, role: e.target.value })}
+                        className="mr-2"
+                      />
+                      <span className="font-medium">GC / PM</span>
+                    </label>
+                    <label className="flex-1 flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer hover:bg-blue-50 transition-colors">
+                      <input
+                        type="radio"
+                        name="role"
+                        value="sub"
+                        checked={authForm.role === 'sub'}
+                        onChange={(e) => setAuthForm({ ...authForm, role: e.target.value })}
+                        className="mr-2"
+                      />
+                      <span className="font-medium">Subcontractor</span>
+                    </label>
+                  </div>
+                </div>
+
+                {authForm.role === 'gc' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Company Name
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value={authForm.companyName}
+                      onChange={(e) => setAuthForm({ ...authForm, companyName: e.target.value })}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                required
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={authForm.email}
+                onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                required
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={authForm.password}
+                onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Loading...' : (authView === 'login' ? 'Log In' : 'Sign Up')}
+            </button>
+          </form>
+
+          <p className="text-center mt-4 text-sm text-gray-600">
+            {authView === 'login' ? "Don't have an account? " : "Already have an account? "}
+            <button
+              onClick={() => setAuthView(authView === 'login' ? 'signup' : 'login')}
+              className="text-blue-600 font-medium hover:underline"
+            >
+              {authView === 'login' ? 'Sign Up' : 'Log In'}
+            </button>
+          </p>
         </div>
       </div>
     );
   }
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <Clock className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // GC view - Project selection
+  if (profile.role === 'gc' && !currentProject && view === 'list') {
+    return (
+      <div className="min-h-screen bg-gray-100">
+        <div className="bg-blue-600 text-white p-4 shadow-md flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-bold">My Projects</h1>
+            <p className="text-sm opacity-90">{profile.company_name || profile.full_name}</p>
+          </div>
+          <button
+            onClick={signOut}
+            className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-4">
+          {projects.length === 0 ? (
+            <div className="text-center py-12">
+              <Folder className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500 text-lg mb-2">No projects yet</p>
+              <p className="text-gray-400 text-sm mb-6">Create your first project to get started</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {projects.map(project => (
+                <button
+                  key={project.id}
+                  onClick={() => setCurrentProject(project)}
+                  className="w-full p-4 bg-white rounded-lg shadow-sm border-2 border-gray-200 hover:border-blue-500 transition-colors text-left"
+                >
+                  <h3 className="font-medium text-gray-900">{project.name}</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Created {new Date(project.created_at).toLocaleDateString()}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={() => setView('create-project')}
+          className="fixed bottom-6 right-6 w-16 h-16 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors"
+        >
+          <FolderPlus className="w-8 h-8" />
+        </button>
+      </div>
+    );
+  }
+
+  // Create project view
+  if (view === 'create-project') {
+    return (
+      <div className="min-h-screen bg-gray-100">
+        <div className="bg-blue-600 text-white p-4 shadow-md">
+          <h1 className="text-xl font-bold">New Project</h1>
+        </div>
+
+        <form onSubmit={createProject} className="p-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Project Name
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g., Main Street Office Building"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              value={newProject.name}
+              onChange={(e) => setNewProject({ name: e.target.value })}
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setView('list');
+                setNewProject({ name: '' });
+              }}
+              className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+            >
+              Create Project
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // Create item view
   if (view === 'create') {
     return (
       <div className="min-h-screen bg-gray-100 pb-20">
         <div className="bg-blue-600 text-white p-4 sticky top-0 z-10 shadow-md">
           <h1 className="text-xl font-bold">New Punch Item</h1>
+          {currentProject && (
+            <p className="text-sm opacity-90 mt-1">{currentProject.name}</p>
+          )}
         </div>
 
         <div className="p-4 space-y-4">
@@ -309,6 +693,7 @@ export default function PunchListApp() {
               disabled={uploading}
             />
             <button
+              type="button"
               onClick={() => fileInputRef.current.click()}
               disabled={uploading}
               className="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-blue-500 hover:bg-blue-50 transition-colors disabled:opacity-50"
@@ -351,15 +736,38 @@ export default function PunchListApp() {
     );
   }
 
+  // Main list view
   return (
     <div className="min-h-screen bg-gray-100 pb-20">
       <div className="bg-blue-600 text-white p-4 sticky top-0 z-10 shadow-md">
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          <List className="w-6 h-6" />
-          Punch List
-        </h1>
-        <div className="mt-2 text-sm opacity-90">
-          {filteredItems.length} items ({filteredItems.filter(i => i.status === 'completed').length} completed)
+        <div className="flex justify-between items-start mb-2">
+          <div className="flex-1">
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              <List className="w-6 h-6" />
+              {profile.role === 'gc' ? currentProject?.name : 'My Assigned Items'}
+            </h1>
+            <div className="mt-2 text-sm opacity-90">
+              {filteredItems.length} items ({filteredItems.filter(i => i.status === 'completed').length} completed)
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {profile.role === 'gc' && currentProject && (
+              <button
+                onClick={() => setCurrentProject(null)}
+                className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
+                title="Back to projects"
+              >
+                <Folder className="w-5 h-5" />
+              </button>
+            )}
+            <button
+              onClick={signOut}
+              className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
+              title="Sign out"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         
         <div className="mt-3">
@@ -396,7 +804,9 @@ export default function PunchListApp() {
               {filterTrade === 'all' ? 'No punch items yet' : `No ${filterTrade} items`}
             </p>
             <p className="text-gray-400 text-sm">
-              {filterTrade === 'all' ? 'Tap the + button to add your first item' : 'Try a different filter'}
+              {filterTrade === 'all' 
+                ? (profile.role === 'gc' ? 'Tap the + button to add your first item' : 'No items assigned to you yet')
+                : 'Try a different filter'}
             </p>
           </div>
         ) : (
@@ -437,13 +847,15 @@ export default function PunchListApp() {
                   >
                     Mark as {item.status === 'open' ? 'In Progress' : item.status === 'in-progress' ? 'Completed' : 'Open'}
                   </button>
-                  <button
-                    onClick={() => setAssignModal(item.id)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    {item.assigned_to ? 'Reassign' : 'Assign'}
-                  </button>
+                  {profile.role === 'gc' && (
+                    <button
+                      onClick={() => setAssignModal(item.id)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      {item.assigned_to ? 'Reassign' : 'Assign'}
+                    </button>
+                  )}
                 </div>
 
                 <div className="mt-2 text-xs text-gray-500">
@@ -455,12 +867,14 @@ export default function PunchListApp() {
         )}
       </div>
 
-      <button
-        onClick={() => setView('create')}
-        className="fixed bottom-6 right-6 w-16 h-16 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors"
-      >
-        <Plus className="w-8 h-8" />
-      </button>
+      {profile.role === 'gc' && currentProject && (
+        <button
+          onClick={() => setView('create')}
+          className="fixed bottom-6 right-6 w-16 h-16 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors"
+        >
+          <Plus className="w-8 h-8" />
+        </button>
+      )}
 
       {assignModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
