@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, List, Plus, Check, Clock, AlertCircle } from 'lucide-react';
+import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 export default function PunchListApp() {
@@ -7,6 +7,10 @@ export default function PunchListApp() {
   const [view, setView] = useState('list'); // 'list' or 'create'
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [assignModal, setAssignModal] = useState(null);
+  const [assignEmail, setAssignEmail] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [filterTrade, setFilterTrade] = useState('all');
   const [newItem, setNewItem] = useState({
     description: '',
     location: '',
@@ -17,7 +21,8 @@ export default function PunchListApp() {
   });
   const fileInputRef = useRef(null);
 
-  // Load items from Supabase on mount
+  const trades = ['General', 'Electrical', 'Plumbing', 'HVAC', 'Framing', 'Drywall', 'Painting', 'Flooring', 'Tile', 'Cabinets'];
+
   useEffect(() => {
     loadItems();
   }, []);
@@ -33,7 +38,6 @@ export default function PunchListApp() {
       setItems(data || []);
     } catch (error) {
       console.error('Error loading items:', error);
-      // Fallback to localStorage if offline
       const stored = localStorage.getItem('punchListItems');
       if (stored) {
         setItems(JSON.parse(stored));
@@ -43,7 +47,6 @@ export default function PunchListApp() {
     }
   };
 
-  // Save to localStorage as backup whenever items change
   useEffect(() => {
     localStorage.setItem('punchListItems', JSON.stringify(items));
   }, [items]);
@@ -97,12 +100,10 @@ export default function PunchListApp() {
     try {
       let photoUrl = null;
 
-      // Upload photo if exists
       if (newItem.photoFile) {
         photoUrl = await uploadPhoto(newItem.photoFile);
       }
 
-      // Create item in Supabase
       const { data, error } = await supabase
         .from('punch_items')
         .insert([
@@ -118,10 +119,8 @@ export default function PunchListApp() {
 
       if (error) throw error;
 
-      // Add to local state
       setItems([data[0], ...items]);
 
-      // Reset form
       setNewItem({
         description: '',
         location: '',
@@ -152,13 +151,61 @@ export default function PunchListApp() {
 
       if (error) throw error;
 
-      // Update local state
       setItems(items.map(item => 
         item.id === id ? { ...item, status: nextStatus } : item
       ));
     } catch (error) {
       console.error('Error updating status:', error);
       alert('Failed to update status. Please try again.');
+    }
+  };
+
+  const assignItem = async () => {
+    if (!assignEmail || !assignEmail.includes('@')) {
+      alert('Please enter a valid email address');
+      return;
+    }
+
+    setAssigning(true);
+
+    try {
+      const item = items.find(i => i.id === assignModal);
+      
+      const { error } = await supabase
+        .from('punch_items')
+        .update({ 
+          assigned_to: assignEmail,
+          assigned_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', assignModal);
+
+      if (error) throw error;
+
+      // Send email notification (simple mailto for MVP)
+      const subject = encodeURIComponent(`Punch List Item Assigned: ${item.trade}`);
+      const body = encodeURIComponent(
+        `You have been assigned a punch list item:\n\n` +
+        `Trade: ${item.trade}\n` +
+        `Location: ${item.location}\n` +
+        `Description: ${item.description}\n\n` +
+        `Please complete this item and update the status in the punch list app.`
+      );
+      
+      // This will open the user's email client
+      window.location.href = `mailto:${assignEmail}?subject=${subject}&body=${body}`;
+
+      setItems(items.map(i => 
+        i.id === assignModal ? { ...i, assigned_to: assignEmail, assigned_at: new Date().toISOString() } : i
+      ));
+
+      setAssignModal(null);
+      setAssignEmail('');
+    } catch (error) {
+      console.error('Error assigning item:', error);
+      alert('Failed to assign item. Please try again.');
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -179,6 +226,10 @@ export default function PunchListApp() {
       default: return 'bg-gray-50 border-gray-200';
     }
   };
+
+  const filteredItems = filterTrade === 'all' 
+    ? items 
+    : items.filter(item => item.trade === filterTrade);
 
   if (loading) {
     return (
@@ -238,16 +289,9 @@ export default function PunchListApp() {
               disabled={uploading}
             >
               <option value="">Select trade...</option>
-              <option value="General">General</option>
-              <option value="Electrical">Electrical</option>
-              <option value="Plumbing">Plumbing</option>
-              <option value="HVAC">HVAC</option>
-              <option value="Framing">Framing</option>
-              <option value="Drywall">Drywall</option>
-              <option value="Painting">Painting</option>
-              <option value="Flooring">Flooring</option>
-              <option value="Tile">Tile</option>
-              <option value="Cabinets">Cabinets</option>
+              {trades.map(trade => (
+                <option key={trade} value={trade}>{trade}</option>
+              ))}
             </select>
           </div>
 
@@ -315,20 +359,49 @@ export default function PunchListApp() {
           Punch List
         </h1>
         <div className="mt-2 text-sm opacity-90">
-          {items.length} items ({items.filter(i => i.status === 'completed').length} completed)
+          {filteredItems.length} items ({filteredItems.filter(i => i.status === 'completed').length} completed)
+        </div>
+        
+        <div className="mt-3">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2">
+            <Filter className="w-4 h-4 flex-shrink-0" />
+            <button
+              onClick={() => setFilterTrade('all')}
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                filterTrade === 'all' ? 'bg-white text-blue-600' : 'bg-blue-500 text-white'
+              }`}
+            >
+              All
+            </button>
+            {trades.map(trade => (
+              <button
+                key={trade}
+                onClick={() => setFilterTrade(trade)}
+                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                  filterTrade === trade ? 'bg-white text-blue-600' : 'bg-blue-500 text-white'
+                }`}
+              >
+                {trade}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="p-4">
-        {items.length === 0 ? (
+        {filteredItems.length === 0 ? (
           <div className="text-center py-12">
             <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg mb-2">No punch items yet</p>
-            <p className="text-gray-400 text-sm">Tap the + button to add your first item</p>
+            <p className="text-gray-500 text-lg mb-2">
+              {filterTrade === 'all' ? 'No punch items yet' : `No ${filterTrade} items`}
+            </p>
+            <p className="text-gray-400 text-sm">
+              {filterTrade === 'all' ? 'Tap the + button to add your first item' : 'Try a different filter'}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {items.map(item => (
+            {filteredItems.map(item => (
               <div
                 key={item.id}
                 className={`${getStatusColor(item.status)} border-2 rounded-lg p-4 shadow-sm`}
@@ -346,16 +419,32 @@ export default function PunchListApp() {
                   </div>
                 </div>
 
+                {item.assigned_to && (
+                  <div className="flex items-center gap-2 mt-2 p-2 bg-white rounded border border-gray-200">
+                    <Mail className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm text-gray-700">Assigned to: {item.assigned_to}</span>
+                  </div>
+                )}
+
                 {item.photo_url && (
                   <img src={item.photo_url} alt="Issue" className="w-full rounded-lg mt-3 shadow-sm" />
                 )}
 
-                <button
-                  onClick={() => toggleStatus(item.id, item.status)}
-                  className="w-full mt-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-                >
-                  Mark as {item.status === 'open' ? 'In Progress' : item.status === 'in-progress' ? 'Completed' : 'Open'}
-                </button>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => toggleStatus(item.id, item.status)}
+                    className="flex-1 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Mark as {item.status === 'open' ? 'In Progress' : item.status === 'in-progress' ? 'Completed' : 'Open'}
+                  </button>
+                  <button
+                    onClick={() => setAssignModal(item.id)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    {item.assigned_to ? 'Reassign' : 'Assign'}
+                  </button>
+                </div>
 
                 <div className="mt-2 text-xs text-gray-500">
                   Created {new Date(item.created_at).toLocaleDateString()}
@@ -372,6 +461,44 @@ export default function PunchListApp() {
       >
         <Plus className="w-8 h-8" />
       </button>
+
+      {assignModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold mb-4">Assign Item</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Enter the email address of the subcontractor responsible for this item.
+            </p>
+            <input
+              type="email"
+              placeholder="contractor@example.com"
+              value={assignEmail}
+              onChange={(e) => setAssignEmail(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={assigning}
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setAssignModal(null);
+                  setAssignEmail('');
+                }}
+                disabled={assigning}
+                className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={assignItem}
+                disabled={assigning}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {assigning ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
