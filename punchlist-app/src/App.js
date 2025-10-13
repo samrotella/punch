@@ -345,13 +345,15 @@ export default function PunchListApp() {
 
       if (error) throw error;
 
+      const appUrl = window.location.origin;
       const subject = encodeURIComponent(`Punch List Item Assigned: ${item.trade}`);
       const body = encodeURIComponent(
         `You have been assigned a punch list item:\n\n` +
         `Trade: ${item.trade}\n` +
         `Location: ${item.location}\n` +
         `Description: ${item.description}\n\n` +
-        `Please log in to the punch list app to view and update this item.`
+        `Log in to view and update this item:\n${appUrl}\n\n` +
+        `If you don't have an account yet, sign up as a Subcontractor using this email address.`
       );
       
       window.location.href = `mailto:${assignEmail}?subject=${subject}&body=${body}`;
