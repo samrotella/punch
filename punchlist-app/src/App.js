@@ -1,28 +1,49 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, List, Plus, Check, Clock, AlertCircle } from 'lucide-react';
+import { supabase } from './supabaseClient';
 
 export default function PunchListApp() {
   const [items, setItems] = useState([]);
   const [view, setView] = useState('list'); // 'list' or 'create'
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [newItem, setNewItem] = useState({
     description: '',
     location: '',
     trade: '',
     photo: null,
-    status: 'open',
-    createdAt: null
+    photoFile: null,
+    status: 'open'
   });
   const fileInputRef = useRef(null);
 
-  // Load items from localStorage on mount (offline storage)
+  // Load items from Supabase on mount
   useEffect(() => {
-    const stored = localStorage.getItem('punchListItems');
-    if (stored) {
-      setItems(JSON.parse(stored));
-    }
+    loadItems();
   }, []);
 
-  // Save to localStorage whenever items change (offline storage)
+  const loadItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('punch_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setItems(data || []);
+    } catch (error) {
+      console.error('Error loading items:', error);
+      // Fallback to localStorage if offline
+      const stored = localStorage.getItem('punchListItems');
+      if (stored) {
+        setItems(JSON.parse(stored));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Save to localStorage as backup whenever items change
   useEffect(() => {
     localStorage.setItem('punchListItems', JSON.stringify(items));
   }, [items]);
@@ -32,46 +53,113 @@ export default function PunchListApp() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setNewItem({ ...newItem, photo: reader.result });
+        setNewItem({ 
+          ...newItem, 
+          photo: reader.result,
+          photoFile: file 
+        });
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const createItem = () => {
+  const uploadPhoto = async (file) => {
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('punch-photos')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('punch-photos')
+        .getPublicUrl(filePath);
+
+      return data.publicUrl;
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      return null;
+    }
+  };
+
+  const createItem = async () => {
     if (!newItem.description || !newItem.location || !newItem.trade) {
       alert('Please fill in description, location, and trade');
       return;
     }
 
-    const item = {
-      ...newItem,
-      id: Date.now(),
-      createdAt: new Date().toISOString()
-    };
+    setUploading(true);
 
-    setItems([item, ...items]);
-    setNewItem({
-      description: '',
-      location: '',
-      trade: '',
-      photo: null,
-      status: 'open',
-      createdAt: null
-    });
-    setView('list');
+    try {
+      let photoUrl = null;
+
+      // Upload photo if exists
+      if (newItem.photoFile) {
+        photoUrl = await uploadPhoto(newItem.photoFile);
+      }
+
+      // Create item in Supabase
+      const { data, error } = await supabase
+        .from('punch_items')
+        .insert([
+          {
+            description: newItem.description,
+            location: newItem.location,
+            trade: newItem.trade,
+            status: 'open',
+            photo_url: photoUrl
+          }
+        ])
+        .select();
+
+      if (error) throw error;
+
+      // Add to local state
+      setItems([data[0], ...items]);
+
+      // Reset form
+      setNewItem({
+        description: '',
+        location: '',
+        trade: '',
+        photo: null,
+        photoFile: null,
+        status: 'open'
+      });
+      setView('list');
+    } catch (error) {
+      console.error('Error creating item:', error);
+      alert('Failed to create item. Please try again.');
+    } finally {
+      setUploading(false);
+    }
   };
 
-  const toggleStatus = (id) => {
-    setItems(items.map(item => {
-      if (item.id === id) {
-        const statuses = ['open', 'in-progress', 'completed'];
-        const currentIndex = statuses.indexOf(item.status);
-        const nextStatus = statuses[(currentIndex + 1) % statuses.length];
-        return { ...item, status: nextStatus };
-      }
-      return item;
-    }));
+  const toggleStatus = async (id, currentStatus) => {
+    const statuses = ['open', 'in-progress', 'completed'];
+    const currentIndex = statuses.indexOf(currentStatus);
+    const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+
+    try {
+      const { error } = await supabase
+        .from('punch_items')
+        .update({ status: nextStatus, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Update local state
+      setItems(items.map(item => 
+        item.id === id ? { ...item, status: nextStatus } : item
+      ));
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Failed to update status. Please try again.');
+    }
   };
 
   const getStatusIcon = (status) => {
@@ -92,6 +180,17 @@ export default function PunchListApp() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <Clock className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading punch list...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (view === 'create') {
     return (
       <div className="min-h-screen bg-gray-100 pb-20">
@@ -110,6 +209,7 @@ export default function PunchListApp() {
               placeholder="Describe the issue..."
               value={newItem.description}
               onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+              disabled={uploading}
             />
           </div>
 
@@ -123,6 +223,7 @@ export default function PunchListApp() {
               placeholder="Room 101, Hallway, etc."
               value={newItem.location}
               onChange={(e) => setNewItem({ ...newItem, location: e.target.value })}
+              disabled={uploading}
             />
           </div>
 
@@ -134,6 +235,7 @@ export default function PunchListApp() {
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               value={newItem.trade}
               onChange={(e) => setNewItem({ ...newItem, trade: e.target.value })}
+              disabled={uploading}
             >
               <option value="">Select trade...</option>
               <option value="General">General</option>
@@ -160,10 +262,12 @@ export default function PunchListApp() {
               ref={fileInputRef}
               onChange={handlePhotoCapture}
               className="hidden"
+              disabled={uploading}
             />
             <button
               onClick={() => fileInputRef.current.click()}
-              className="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-blue-500 hover:bg-blue-50 transition-colors"
+              disabled={uploading}
+              className="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-blue-500 hover:bg-blue-50 transition-colors disabled:opacity-50"
             >
               <Camera className="w-8 h-8 text-gray-400 mb-2" />
               <span className="text-sm text-gray-600">
@@ -179,15 +283,24 @@ export default function PunchListApp() {
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex gap-3">
           <button
             onClick={() => setView('list')}
-            className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+            disabled={uploading}
+            className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={createItem}
-            className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+            disabled={uploading}
+            className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            Save Item
+            {uploading ? (
+              <>
+                <Clock className="w-5 h-5 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Item'
+            )}
           </button>
         </div>
       </div>
@@ -233,19 +346,19 @@ export default function PunchListApp() {
                   </div>
                 </div>
 
-                {item.photo && (
-                  <img src={item.photo} alt="Issue" className="w-full rounded-lg mt-3 shadow-sm" />
+                {item.photo_url && (
+                  <img src={item.photo_url} alt="Issue" className="w-full rounded-lg mt-3 shadow-sm" />
                 )}
 
                 <button
-                  onClick={() => toggleStatus(item.id)}
+                  onClick={() => toggleStatus(item.id, item.status)}
                   className="w-full mt-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
                 >
                   Mark as {item.status === 'open' ? 'In Progress' : item.status === 'in-progress' ? 'Completed' : 'Open'}
                 </button>
 
                 <div className="mt-2 text-xs text-gray-500">
-                  Created {new Date(item.createdAt).toLocaleDateString()}
+                  Created {new Date(item.created_at).toLocaleDateString()}
                 </div>
               </div>
             ))}
