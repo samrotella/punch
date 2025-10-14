@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail, LogOut, FolderPlus, Folder, Users, X } from 'lucide-react';
+import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail, LogOut, FolderPlus, Folder, Users, X, Search, ChevronUp, ChevronDown } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 export default function PunchListApp() {
@@ -13,9 +13,15 @@ export default function PunchListApp() {
   const [authView, setAuthView] = useState('login');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-
   const [filterTrade, setFilterTrade] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [sortField, setSortField] = useState('created_at');
+  const [sortDirection, setSortDirection] = useState('desc');
   const [showTeamModal, setShowTeamModal] = useState(false);
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  const [bulkAssignEmail, setBulkAssignEmail] = useState('');
   const [newTeamMember, setNewTeamMember] = useState({ email: '', trade: '', name: '' });
   
   const [authForm, setAuthForm] = useState({
@@ -248,7 +254,6 @@ export default function PunchListApp() {
 
       setProjectTeam([...projectTeam, data[0]]);
       setNewTeamMember({ email: '', trade: '', name: '' });
-      setShowTeamModal(false);
     } catch (error) {
       alert(error.message);
     }
@@ -388,6 +393,73 @@ export default function PunchListApp() {
     }
   };
 
+  const bulkUpdateStatus = async (status) => {
+    try {
+      const { error } = await supabase
+        .from('punch_items')
+        .update({ status, updated_at: new Date().toISOString() })
+        .in('id', selectedItems);
+
+      if (error) throw error;
+
+      setItems(items.map(item => 
+        selectedItems.includes(item.id) ? { ...item, status } : item
+      ));
+      setSelectedItems([]);
+      setShowBulkActions(false);
+    } catch (error) {
+      alert('Failed to update items. Please try again.');
+    }
+  };
+
+  const bulkAssign = async () => {
+    if (!bulkAssignEmail) {
+      alert('Please select someone to assign to');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('punch_items')
+        .update({ 
+          assigned_to: bulkAssignEmail,
+          assigned_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .in('id', selectedItems);
+
+      if (error) throw error;
+
+      setItems(items.map(item => 
+        selectedItems.includes(item.id) 
+          ? { ...item, assigned_to: bulkAssignEmail, assigned_at: new Date().toISOString() }
+          : item
+      ));
+      setSelectedItems([]);
+      setBulkAssignEmail('');
+      setShowBulkActions(false);
+    } catch (error) {
+      alert('Failed to assign items. Please try again.');
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedItems.length === filteredItems.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(filteredItems.map(item => item.id));
+    }
+  };
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
   const getStatusIcon = (status) => {
     switch(status) {
       case 'open': return <AlertCircle className="w-5 h-5 text-red-500" />;
@@ -406,14 +478,54 @@ export default function PunchListApp() {
     }
   };
 
-  const filteredItems = filterTrade === 'all' 
-    ? items 
-    : items.filter(item => item.trade === filterTrade);
+  const getStatusBadge = (status) => {
+    const badges = {
+      'open': 'bg-red-100 text-red-800',
+      'in-progress': 'bg-yellow-100 text-yellow-800',
+      'completed': 'bg-green-100 text-green-800'
+    };
+    return badges[status] || 'bg-gray-100 text-gray-800';
+  };
 
-  // Get team members for the selected item's trade
   const getTeamMembersForTrade = (trade) => {
     return projectTeam.filter(member => member.trade === trade);
   };
+
+  // Apply filters and search
+  let filteredItems = items;
+  
+  if (filterTrade !== 'all') {
+    filteredItems = filteredItems.filter(item => item.trade === filterTrade);
+  }
+  
+  if (filterStatus !== 'all') {
+    filteredItems = filteredItems.filter(item => item.status === filterStatus);
+  }
+  
+  if (searchQuery) {
+    const query = searchQuery.toLowerCase();
+    filteredItems = filteredItems.filter(item => 
+      item.description.toLowerCase().includes(query) ||
+      item.location.toLowerCase().includes(query) ||
+      item.trade.toLowerCase().includes(query) ||
+      (item.assigned_to && item.assigned_to.toLowerCase().includes(query))
+    );
+  }
+
+  // Apply sorting
+  filteredItems = [...filteredItems].sort((a, b) => {
+    let aVal = a[sortField];
+    let bVal = b[sortField];
+    
+    if (sortField === 'created_at' || sortField === 'updated_at') {
+      aVal = new Date(aVal);
+      bVal = new Date(bVal);
+    }
+    
+    if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   // Auth screens
   if (!user || !profile) {
@@ -572,15 +684,15 @@ export default function PunchListApp() {
               <p className="text-gray-400 text-sm mb-6">Create your first project to get started</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {projects.map(project => (
                 <button
                   key={project.id}
                   onClick={() => setCurrentProject(project)}
-                  className="w-full p-4 bg-white rounded-lg shadow-sm border-2 border-gray-200 hover:border-blue-500 transition-colors text-left"
+                  className="p-6 bg-white rounded-lg shadow-sm border-2 border-gray-200 hover:border-blue-500 transition-colors text-left"
                 >
-                  <h3 className="font-medium text-gray-900">{project.name}</h3>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <h3 className="font-medium text-gray-900 text-lg">{project.name}</h3>
+                  <p className="text-sm text-gray-500 mt-2">
                     Created {new Date(project.created_at).toLocaleDateString()}
                   </p>
                 </button>
@@ -607,7 +719,7 @@ export default function PunchListApp() {
           <h1 className="text-xl font-bold">New Project</h1>
         </div>
 
-        <form onSubmit={createProject} className="p-4 space-y-4">
+        <form onSubmit={createProject} className="p-4 space-y-4 max-w-2xl mx-auto">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Project Name
@@ -656,7 +768,7 @@ export default function PunchListApp() {
           )}
         </div>
 
-        <div className="p-4 space-y-4">
+        <div className="p-4 max-w-2xl mx-auto space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Description *
@@ -772,7 +884,7 @@ export default function PunchListApp() {
           </div>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex gap-3">
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex gap-3 max-w-2xl mx-auto">
           <button
             onClick={() => setView('list')}
             disabled={uploading}
@@ -799,9 +911,9 @@ export default function PunchListApp() {
     );
   }
 
-  // Main list view
-  return (
-    <div className="min-h-screen bg-gray-100 pb-20">
+  // Main list view - MOBILE
+  const MobileView = () => (
+    <div className="block lg:hidden">
       <div className="bg-blue-600 text-white p-4 sticky top-0 z-10 shadow-md">
         <div className="flex justify-between items-start mb-2">
           <div className="flex-1">
@@ -947,6 +1059,319 @@ export default function PunchListApp() {
           <Plus className="w-8 h-8" />
         </button>
       )}
+    </div>
+  );
+
+  // Main list view - DESKTOP
+  const DesktopView = () => (
+    <div className="hidden lg:block min-h-screen bg-gray-100">
+      <div className="bg-blue-600 text-white p-4 shadow-md">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">
+              {profile.role === 'gc' ? currentProject?.name : 'My Assigned Items'}
+            </h1>
+            <p className="text-sm opacity-90 mt-1">
+              {profile.company_name || profile.full_name}
+            </p>
+          </div>
+          <div className="flex gap-3">
+            {profile.role === 'gc' && currentProject && (
+              <>
+                <button
+                  onClick={() => setView('create')}
+                  className="px-4 py-2 bg-white text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  New Item
+                </button>
+                <button
+                  onClick={() => setShowTeamModal(true)}
+                  className="px-4 py-2 bg-blue-700 hover:bg-blue-800 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Users className="w-5 h-5" />
+                  Team
+                </button>
+                <button
+                  onClick={() => setCurrentProject(null)}
+                  className="px-4 py-2 bg-blue-700 hover:bg-blue-800 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Folder className="w-5 h-5" />
+                  Projects
+                </button>
+              </>
+            )}
+            <button
+              onClick={signOut}
+              className="px-4 py-2 bg-blue-700 hover:bg-blue-800 rounded-lg transition-colors flex items-center gap-2"
+            >
+              <LogOut className="w-5 h-5" />
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto p-6">
+        {/* Filters and Search */}
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-4 flex gap-4 items-center">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="all">All Status</option>
+            <option value="open">Open</option>
+            <option value="in-progress">In Progress</option>
+            <option value="completed">Completed</option>
+          </select>
+          <select
+            value={filterTrade}
+            onChange={(e) => setFilterTrade(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="all">All Trades</option>
+            {trades.map(trade => (
+              <option key={trade} value={trade}>{trade}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Stats */}
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+          <div className="flex justify-between items-center">
+            <div className="text-sm text-gray-600">
+              <span className="font-medium text-gray-900">{filteredItems.length}</span> items
+              {' • '}
+              <span className="text-red-600">{filteredItems.filter(i => i.status === 'open').length} open</span>
+              {' • '}
+              <span className="text-yellow-600">{filteredItems.filter(i => i.status === 'in-progress').length} in progress</span>
+              {' • '}
+              <span className="text-green-600">{filteredItems.filter(i => i.status === 'completed').length} completed</span>
+            </div>
+            {selectedItems.length > 0 && (
+              <button
+                onClick={() => setShowBulkActions(!showBulkActions)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Bulk Actions ({selectedItems.length})
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Bulk Actions Bar */}
+        {showBulkActions && selectedItems.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex gap-4 items-center">
+            <span className="text-sm font-medium text-gray-700">{selectedItems.length} selected</span>
+            <select
+              value={bulkAssignEmail}
+              onChange={(e) => setBulkAssignEmail(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Assign to...</option>
+              {projectTeam.map(member => (
+                <option key={member.id} value={member.email}>
+                  {member.name ? `${member.name} (${member.email})` : member.email}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={bulkAssign}
+              disabled={!bulkAssignEmail}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              Assign
+            </button>
+            <div className="border-l border-gray-300 h-8"></div>
+            <button
+              onClick={() => bulkUpdateStatus('in-progress')}
+              className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+            >
+              Mark In Progress
+            </button>
+            <button
+              onClick={() => bulkUpdateStatus('completed')}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Mark Completed
+            </button>
+            <button
+              onClick={() => {
+                setSelectedItems([]);
+                setShowBulkActions(false);
+              }}
+              className="ml-auto px-4 py-2 text-gray-600 hover:text-gray-900"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* Table */}
+        {filteredItems.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+            <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500 text-lg mb-2">No items found</p>
+            <p className="text-gray-400 text-sm">
+              {profile.role === 'gc' ? 'Create your first punch item to get started' : 'No items assigned to you yet'}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  {profile.role === 'gc' && (
+                    <th className="px-4 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={selectedItems.length === filteredItems.length}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-300"
+                      />
+                    </th>
+                  )}
+                  <th 
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('status')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Status
+                      {sortField === 'status' && (
+                        sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('trade')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Trade
+                      {sortField === 'trade' && (
+                        sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Description
+                  </th>
+                  <th 
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('location')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Location
+                      {sortField === 'location' && (
+                        sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Assigned To
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Photo
+                  </th>
+                  <th 
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('created_at')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Created
+                      {sortField === 'created_at' && (
+                        sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredItems.map(item => (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    {profile.role === 'gc' && (
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.includes(item.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedItems([...selectedItems, item.id]);
+                            } else {
+                              setSelectedItems(selectedItems.filter(id => id !== item.id));
+                            }
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                      </td>
+                    )}
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(item.status)}`}>
+                        {item.status.replace('-', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      {item.trade}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 max-w-xs">
+                      {item.description}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {item.location}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {item.assigned_to || '-'}
+                    </td>
+                    <td className="px-4 py-3">
+                      {item.photo_url && (
+                        <img 
+                          src={item.photo_url} 
+                          alt="Issue" 
+                          className="w-12 h-12 object-cover rounded cursor-pointer hover:opacity-80"
+                          onClick={() => window.open(item.photo_url, '_blank')}
+                          title="Click to view full size"
+                        />
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => toggleStatus(item.id, item.status)}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        Update
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <MobileView />
+      <DesktopView />
 
       {/* Team Management Modal */}
       {showTeamModal && (
