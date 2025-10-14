@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail, LogOut, FolderPlus, Folder, Users, X, Search, ChevronUp, ChevronDown, Eye } from 'lucide-react';
+import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail, LogOut, FolderPlus, Folder, Users, X, Search, ChevronUp, ChevronDown, Eye, Settings } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { 
   STATUSES, 
@@ -14,6 +14,7 @@ import {
 import AuthScreen from './components/Auth/AuthScreen';
 import { ProjectList, ProjectForm } from './components/Projects/ProjectViews';
 import TeamModal from './components/Team/TeamModal';
+import SettingsPage from './components/Settings/SettingsPage';
 
 export default function PunchListApp() {
   const [user, setUser] = useState(null);
@@ -155,6 +156,8 @@ export default function PunchListApp() {
       if (authError) throw authError;
 
       let companyId = null;
+      let createdNewCompany = false;
+      let newInviteCode = null;
 
       // Handle company logic for GC users
       if (formData.role === 'gc') {
@@ -173,14 +176,14 @@ export default function PunchListApp() {
           companyId = company.id;
         } else {
           // Create new company
-          const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+          newInviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
           
           const { data: newCompany, error: companyError} = await supabase
             .from('companies')
             .insert([
               {
                 name: formData.companyName,
-                invite_code: inviteCode
+                invite_code: newInviteCode
               }
             ])
             .select()
@@ -189,6 +192,7 @@ export default function PunchListApp() {
           if (companyError) throw companyError;
 
           companyId = newCompany.id;
+          createdNewCompany = true;
         }
       }
 
@@ -208,7 +212,13 @@ export default function PunchListApp() {
 
       if (profileError) throw profileError;
 
-      alert('Account created! Please check your email to verify your account.');
+      // Show invite code modal if they created a new company
+      if (createdNewCompany && newInviteCode) {
+        setInviteCode(newInviteCode);
+        setShowInviteCode(true);
+      } else {
+        alert('Account created! Please check your email to verify your account.');
+      }
     } catch (error) {
       alert(error.message);
     } finally {
@@ -1225,6 +1235,59 @@ export default function PunchListApp() {
           onAddMember={addTeamMember}
           onRemoveMember={removeTeamMember}
         />
+      )}
+
+      {/* Invite Code Modal */}
+      {showInviteCode && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Check className="w-8 h-8 text-green-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Account Created!</h2>
+              <p className="text-gray-600 mb-6">
+                Your company has been set up. Share this invite code with your team members so they can join.
+              </p>
+              
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-gray-600 mb-2">Your Company Invite Code:</p>
+                <div className="flex items-center justify-center gap-3">
+                  <code className="text-3xl font-bold text-blue-600 tracking-wider">
+                    {inviteCode}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(inviteCode);
+                      alert('Invite code copied to clipboard!');
+                    }}
+                    className="p-2 hover:bg-blue-100 rounded transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-500 mb-6">
+                Save this code! Your team will need it to sign up and join your company.
+              </p>
+
+              <button
+                onClick={() => setShowInviteCode(false)}
+                className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+              >
+                Continue to App
+              </button>
+
+              <p className="text-xs text-gray-500 mt-4">
+                Please check your email to verify your account.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
