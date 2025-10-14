@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Folder, FolderPlus, LogOut } from 'lucide-react';
+import { Folder, FolderPlus, LogOut, Settings } from 'lucide-react';
 
-export function ProjectList({ projects, profile, onSelectProject, onCreateNew, onSignOut }) {
+export function ProjectList({ projects, profile, onSelectProject, onCreateNew, onSignOut, onSettings }) {
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="bg-blue-600 text-white p-4 shadow-md flex justify-between items-center">
@@ -9,12 +9,21 @@ export function ProjectList({ projects, profile, onSelectProject, onCreateNew, o
           <h1 className="text-xl font-bold">My Projects</h1>
           <p className="text-sm opacity-90">{profile.company_name || profile.full_name}</p>
         </div>
-        <button
-          onClick={onSignOut}
-          className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
-        >
-          <LogOut className="w-5 h-5" />
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onSettings}
+            className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
+            title="Settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+          <button
+            onClick={onSignOut}
+            className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="p-4">
