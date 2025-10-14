@@ -34,6 +34,8 @@ export default function PunchListApp() {
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [bulkAssignEmail, setBulkAssignEmail] = useState('');
+  const [showInviteCode, setShowInviteCode] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
 
   const [newItem, setNewItem] = useState({
     description: '',
