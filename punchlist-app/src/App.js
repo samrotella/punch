@@ -13,9 +13,7 @@ export default function PunchListApp() {
   const [authView, setAuthView] = useState('login');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [assignModal, setAssignModal] = useState(null);
-  const [assignEmail, setAssignEmail] = useState('');
-  const [assigning, setAssigning] = useState(false);
+
   const [filterTrade, setFilterTrade] = useState('all');
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [newTeamMember, setNewTeamMember] = useState({ email: '', trade: '', name: '' });
@@ -38,7 +36,8 @@ export default function PunchListApp() {
     trade: '',
     photo: null,
     photoFile: null,
-    status: 'open'
+    status: 'open',
+    assignedTo: ''
   });
 
   const fileInputRef = useRef(null);
@@ -338,7 +337,9 @@ export default function PunchListApp() {
             status: 'open',
             photo_url: photoUrl,
             project_id: currentProject.id,
-            created_by: user.id
+            created_by: user.id,
+            assigned_to: newItem.assignedTo || null,
+            assigned_at: newItem.assignedTo ? new Date().toISOString() : null
           }
         ])
         .select();
@@ -353,7 +354,8 @@ export default function PunchListApp() {
         trade: '',
         photo: null,
         photoFile: null,
-        status: 'open'
+        status: 'open',
+        assignedTo: ''
       });
       setView('list');
     } catch (error) {
@@ -383,56 +385,6 @@ export default function PunchListApp() {
     } catch (error) {
       console.error('Error updating status:', error);
       alert('Failed to update status. Please try again.');
-    }
-  };
-
-  const assignItem = async () => {
-    if (!assignEmail || !assignEmail.includes('@')) {
-      alert('Please select a team member');
-      return;
-    }
-
-    setAssigning(true);
-
-    try {
-      const item = items.find(i => i.id === assignModal);
-      
-      const { error } = await supabase
-        .from('punch_items')
-        .update({ 
-          assigned_to: assignEmail,
-          assigned_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', assignModal);
-
-      if (error) throw error;
-
-      const appUrl = window.location.origin;
-      const subject = encodeURIComponent(`Punch List Item Assigned: ${item.trade}`);
-      const body = encodeURIComponent(
-        `You have been assigned a punch list item:\n\n` +
-        `Project: ${currentProject.name}\n` +
-        `Trade: ${item.trade}\n` +
-        `Location: ${item.location}\n` +
-        `Description: ${item.description}\n\n` +
-        `Log in to view and update this item:\n${appUrl}\n\n` +
-        `If you don't have an account yet, sign up as a Subcontractor using this email address.`
-      );
-      
-      window.location.href = `mailto:${assignEmail}?subject=${subject}&body=${body}`;
-
-      setItems(items.map(i => 
-        i.id === assignModal ? { ...i, assigned_to: assignEmail, assigned_at: new Date().toISOString() } : i
-      ));
-
-      setAssignModal(null);
-      setAssignEmail('');
-    } catch (error) {
-      console.error('Error assigning item:', error);
-      alert('Failed to assign item. Please try again.');
-    } finally {
-      setAssigning(false);
     }
   };
 
@@ -750,6 +702,46 @@ export default function PunchListApp() {
             </select>
           </div>
 
+          {newItem.trade && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Assign To (Optional)
+              </label>
+              {(() => {
+                const teamMembers = getTeamMembersForTrade(newItem.trade);
+                
+                if (teamMembers.length === 0) {
+                  return (
+                    <input
+                      type="email"
+                      placeholder="Enter email address"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value={newItem.assignedTo}
+                      onChange={(e) => setNewItem({ ...newItem, assignedTo: e.target.value })}
+                      disabled={uploading}
+                    />
+                  );
+                }
+                
+                return (
+                  <select
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={newItem.assignedTo}
+                    onChange={(e) => setNewItem({ ...newItem, assignedTo: e.target.value })}
+                    disabled={uploading}
+                  >
+                    <option value="">Unassigned</option>
+                    {teamMembers.map(member => (
+                      <option key={member.id} value={member.email}>
+                        {member.name ? `${member.name} (${member.email})` : member.email}
+                      </option>
+                    ))}
+                  </select>
+                );
+              })()}
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Photo
@@ -920,7 +912,13 @@ export default function PunchListApp() {
                 )}
 
                 {item.photo_url && (
-                  <img src={item.photo_url} alt="Issue" className="w-full rounded-lg mt-3 shadow-sm" />
+                  <img 
+                    src={item.photo_url} 
+                    alt="Issue" 
+                    className="w-32 h-32 object-cover rounded-lg mt-3 shadow-sm cursor-pointer hover:opacity-90 transition-opacity" 
+                    onClick={() => window.open(item.photo_url, '_blank')}
+                    title="Click to view full size"
+                  />
                 )}
 
                 <div className="flex gap-2 mt-3">
@@ -930,20 +928,6 @@ export default function PunchListApp() {
                   >
                     Mark as {item.status === 'open' ? 'In Progress' : item.status === 'in-progress' ? 'Completed' : 'Open'}
                   </button>
-                  {profile.role === 'gc' && (
-                    <button
-                      onClick={() => {
-                        setAssignModal(item.id);
-                        if (item.assigned_to) {
-                          setAssignEmail(item.assigned_to);
-                        }
-                      }}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
-                    >
-                      <UserPlus className="w-4 h-4" />
-                      {item.assigned_to ? 'Reassign' : 'Assign'}
-                    </button>
-                  )}
                 </div>
 
                 <div className="mt-2 text-xs text-gray-500">
@@ -1045,91 +1029,6 @@ export default function PunchListApp() {
                   </div>
                 ))
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Assignment Modal */}
-      {assignModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold mb-4">Assign Item</h2>
-            
-            {(() => {
-              const item = items.find(i => i.id === assignModal);
-              const teamMembers = getTeamMembersForTrade(item?.trade);
-              
-              return (
-                <>
-                  <p className="text-sm text-gray-600 mb-4">
-                    {teamMembers.length > 0 
-                      ? `Select a ${item.trade} team member or enter a new email:`
-                      : 'No team members added for this trade yet. Enter an email address:'}
-                  </p>
-
-                  {teamMembers.length > 0 && (
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Team Members
-                      </label>
-                      <div className="space-y-2 max-h-40 overflow-y-auto">
-                        {teamMembers.map(member => (
-                          <button
-                            key={member.id}
-                            type="button"
-                            onClick={() => setAssignEmail(member.email)}
-                            className={`w-full text-left p-3 border-2 rounded-lg transition-colors ${
-                              assignEmail === member.email
-                                ? 'border-blue-500 bg-blue-50'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="font-medium text-sm">{member.name || member.email}</div>
-                            {member.name && (
-                              <div className="text-xs text-gray-600">{member.email}</div>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Or enter email manually
-                    </label>
-                    <input
-                      type="email"
-                      placeholder="contractor@example.com"
-                      value={assignEmail}
-                      onChange={(e) => setAssignEmail(e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={assigning}
-                    />
-                  </div>
-                </>
-              );
-            })()}
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setAssignModal(null);
-                  setAssignEmail('');
-                }}
-                disabled={assigning}
-                className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={assignItem}
-                disabled={assigning}
-                className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                {assigning ? 'Assigning...' : 'Assign'}
-              </button>
             </div>
           </div>
         </div>
