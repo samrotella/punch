@@ -37,6 +37,7 @@ export default function PunchListApp() {
   const [bulkAssignEmail, setBulkAssignEmail] = useState('');
   const [showInviteCode, setShowInviteCode] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
 
   const [newItem, setNewItem] = useState({
     description: '',
@@ -575,6 +576,7 @@ export default function PunchListApp() {
         onSelectProject={setCurrentProject}
         onCreateNew={() => setView('create-project')}
         onSignOut={signOut}
+        onSettings={() => setShowSettings(true)}
       />
     );
   }
@@ -777,6 +779,17 @@ export default function PunchListApp() {
               </>
             )}
             <button
+              onClick={() => {
+                console.log('Settings clicked, showSettings was:', showSettings);
+                setShowSettings(true);
+                console.log('Settings clicked, showSettings now:', true);
+              }}
+              className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
+              title="Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+            <button
               onClick={signOut}
               className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
               title="Sign out"
@@ -939,6 +952,17 @@ export default function PunchListApp() {
                 </button>
               </>
             )}
+            <button
+              onClick={() => {
+                console.log('Settings clicked (desktop), showSettings was:', showSettings);
+                setShowSettings(true);
+                console.log('Settings clicked (desktop), showSettings now:', true);
+              }}
+              className="px-4 py-2 bg-blue-700 hover:bg-blue-800 rounded-lg transition-colors flex items-center gap-2"
+            >
+              <Settings className="w-5 h-5" />
+              Settings
+            </button>
             <button
               onClick={signOut}
               className="px-4 py-2 bg-blue-700 hover:bg-blue-800 rounded-lg transition-colors flex items-center gap-2"
@@ -1272,7 +1296,7 @@ export default function PunchListApp() {
               </div>
 
               <p className="text-sm text-gray-500 mb-6">
-                Save this code! Your team will need it to sign up and join your company.
+                Save this code! You can also find it anytime in Settings. Your team will need it to sign up and join your company.
               </p>
 
               <button
@@ -1288,6 +1312,17 @@ export default function PunchListApp() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Settings Page */}
+      {showSettings && (
+        <>
+          {console.log('Rendering SettingsPage, showSettings:', showSettings, 'profile:', profile)}
+          <SettingsPage 
+            profile={profile}
+            onClose={() => setShowSettings(false)}
+          />
+        </>
       )}
     </div>
   );
