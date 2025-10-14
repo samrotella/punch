@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Users, Building2, Mail, User } from 'lucide-react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../../supabaseClient';
 
 export default function SettingsPage({ profile, onClose }) {
   const [company, setCompany] = useState(null);
