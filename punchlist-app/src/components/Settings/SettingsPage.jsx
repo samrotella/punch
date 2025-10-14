@@ -8,6 +8,8 @@ export default function SettingsPage({ profile, onClose }) {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
+  console.log('SettingsPage rendered with profile:', profile);
+
   useEffect(() => {
     if (profile.role === 'gc' && profile.company_id) {
       loadCompanyData();
@@ -18,6 +20,8 @@ export default function SettingsPage({ profile, onClose }) {
 
   const loadCompanyData = async () => {
     try {
+      console.log('Loading company data for company_id:', profile.company_id);
+      
       // Load company info
       const { data: companyData, error: companyError } = await supabase
         .from('companies')
@@ -25,7 +29,16 @@ export default function SettingsPage({ profile, onClose }) {
         .eq('id', profile.company_id)
         .single();
 
-      if (companyError) throw companyError;
+      console.log('Company data:', companyData);
+      console.log('Company error:', companyError);
+
+      if (companyError) {
+        console.error('Company error:', companyError);
+        // Don't throw - just set loading to false
+        setLoading(false);
+        return;
+      }
+      
       setCompany(companyData);
 
       // Load team members
@@ -35,7 +48,13 @@ export default function SettingsPage({ profile, onClose }) {
         .eq('company_id', profile.company_id)
         .order('created_at', { ascending: true });
 
-      if (membersError) throw membersError;
+      console.log('Members data:', membersData);
+      console.log('Members error:', membersError);
+
+      if (membersError) {
+        console.error('Members error:', membersError);
+      }
+      
       setTeamMembers(membersData || []);
     } catch (error) {
       console.error('Error loading company data:', error);
