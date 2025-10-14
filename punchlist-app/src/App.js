@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail, LogOut, FolderPlus, Folder, Users, X, Search, ChevronUp, ChevronDown } from 'lucide-react';
+import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail, LogOut, FolderPlus, Folder, Users, X, Search, ChevronUp, ChevronDown, Eye } from 'lucide-react';
 import { supabase } from './supabaseClient';
+import { 
+  STATUSES, 
+  getStatusIcon, 
+  getStatusColor, 
+  getStatusBadge, 
+  getStatusLabel,
+  getNextStatus,
+  getStatusButtonLabel,
+  canUpdateStatus
+} from './utils/statusHelpers';
 
 export default function PunchListApp() {
   const [user, setUser] = useState(null);
