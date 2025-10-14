@@ -144,6 +144,7 @@ export default function PunchListApp() {
     setLoading(true);
 
     try {
+      // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -151,6 +152,45 @@ export default function PunchListApp() {
 
       if (authError) throw authError;
 
+      let companyId = null;
+
+      // Handle company logic for GC users
+      if (formData.role === 'gc') {
+        if (formData.inviteCode) {
+          // Join existing company via invite code
+          const { data: company, error: companyError } = await supabase
+            .from('companies')
+            .select('id')
+            .eq('invite_code', formData.inviteCode)
+            .single();
+
+          if (companyError || !company) {
+            throw new Error('Invalid invite code. Please check the code and try again.');
+          }
+
+          companyId = company.id;
+        } else {
+          // Create new company
+          const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+          
+          const { data: newCompany, error: companyError} = await supabase
+            .from('companies')
+            .insert([
+              {
+                name: formData.companyName,
+                invite_code: inviteCode
+              }
+            ])
+            .select()
+            .single();
+
+          if (companyError) throw companyError;
+
+          companyId = newCompany.id;
+        }
+      }
+
+      // Create profile
       const { error: profileError } = await supabase
         .from('profiles')
         .insert([
@@ -159,7 +199,8 @@ export default function PunchListApp() {
             email: formData.email,
             full_name: formData.fullName,
             role: formData.role,
-            company_name: formData.companyName
+            company_id: companyId,
+            company_name: formData.role === 'sub' ? null : formData.companyName
           }
         ]);
 
@@ -209,7 +250,8 @@ export default function PunchListApp() {
         .insert([
           {
             name: projectName,
-            owner_id: user.id
+            owner_id: user.id,
+            company_id: profile.company_id
           }
         ])
         .select();

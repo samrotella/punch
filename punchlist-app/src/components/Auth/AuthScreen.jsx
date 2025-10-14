@@ -7,7 +7,8 @@ export default function AuthScreen({ onSignIn, onSignUp, loading }) {
     password: '',
     fullName: '',
     role: 'gc',
-    companyName: ''
+    companyName: '',
+    inviteCode: ''
   });
 
   const handleSubmit = (e) => {
@@ -73,17 +74,40 @@ export default function AuthScreen({ onSignIn, onSignUp, loading }) {
               </div>
 
               {authForm.role === 'gc' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Company Name
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={authForm.companyName}
-                    onChange={(e) => setAuthForm({ ...authForm, companyName: e.target.value })}
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Do you have an invite code?
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter 8-character code (optional)"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase"
+                      value={authForm.inviteCode}
+                      onChange={(e) => setAuthForm({ ...authForm, inviteCode: e.target.value.toUpperCase() })}
+                      maxLength={8}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      If a teammate invited you, enter their code. Otherwise, leave blank to create a new company.
+                    </p>
+                  </div>
+
+                  {!authForm.inviteCode && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Company Name
+                      </label>
+                      <input
+                        type="text"
+                        required={!authForm.inviteCode}
+                        placeholder="Your company name"
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={authForm.companyName}
+                        onChange={(e) => setAuthForm({ ...authForm, companyName: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
