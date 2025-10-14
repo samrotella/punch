@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail, LogOut, FolderPlus, Folder } from 'lucide-react';
+import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail, LogOut, FolderPlus, Folder, Users, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 export default function PunchListApp() {
@@ -7,6 +7,7 @@ export default function PunchListApp() {
   const [profile, setProfile] = useState(null);
   const [projects, setProjects] = useState([]);
   const [currentProject, setCurrentProject] = useState(null);
+  const [projectTeam, setProjectTeam] = useState([]);
   const [items, setItems] = useState([]);
   const [view, setView] = useState('list');
   const [authView, setAuthView] = useState('login');
@@ -16,6 +17,8 @@ export default function PunchListApp() {
   const [assignEmail, setAssignEmail] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [filterTrade, setFilterTrade] = useState('all');
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const [newTeamMember, setNewTeamMember] = useState({ email: '', trade: '', name: '' });
   
   const [authForm, setAuthForm] = useState({
     email: '',
@@ -58,6 +61,7 @@ export default function PunchListApp() {
   useEffect(() => {
     if (currentProject) {
       loadItems();
+      loadProjectTeam();
     }
   }, [currentProject]);
 
@@ -93,6 +97,19 @@ export default function PunchListApp() {
     }
   };
 
+  const loadProjectTeam = async () => {
+    if (!currentProject) return;
+
+    const { data, error } = await supabase
+      .from('project_team')
+      .select('*')
+      .eq('project_id', currentProject.id);
+
+    if (data) {
+      setProjectTeam(data);
+    }
+  };
+
   const loadItems = async () => {
     if (!currentProject) return;
 
@@ -110,7 +127,7 @@ export default function PunchListApp() {
   const loadAssignedItems = async () => {
     const { data, error } = await supabase
       .from('punch_items')
-      .select('*')
+      .select('*, projects(name)')
       .eq('assigned_to', user.email)
       .order('created_at', { ascending: false });
 
@@ -202,6 +219,52 @@ export default function PunchListApp() {
       setProjects([data[0], ...projects]);
       setNewProject({ name: '' });
       setView('list');
+    } catch (error) {
+      alert(error.message);
+    }
+  };
+
+  const addTeamMember = async (e) => {
+    e.preventDefault();
+
+    if (!newTeamMember.email || !newTeamMember.trade) {
+      alert('Please fill in email and trade');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('project_team')
+        .insert([
+          {
+            project_id: currentProject.id,
+            email: newTeamMember.email,
+            trade: newTeamMember.trade,
+            name: newTeamMember.name
+          }
+        ])
+        .select();
+
+      if (error) throw error;
+
+      setProjectTeam([...projectTeam, data[0]]);
+      setNewTeamMember({ email: '', trade: '', name: '' });
+      setShowTeamModal(false);
+    } catch (error) {
+      alert(error.message);
+    }
+  };
+
+  const removeTeamMember = async (memberId) => {
+    try {
+      const { error } = await supabase
+        .from('project_team')
+        .delete()
+        .eq('id', memberId);
+
+      if (error) throw error;
+
+      setProjectTeam(projectTeam.filter(m => m.id !== memberId));
     } catch (error) {
       alert(error.message);
     }
@@ -325,7 +388,7 @@ export default function PunchListApp() {
 
   const assignItem = async () => {
     if (!assignEmail || !assignEmail.includes('@')) {
-      alert('Please enter a valid email address');
+      alert('Please select a team member');
       return;
     }
 
@@ -349,6 +412,7 @@ export default function PunchListApp() {
       const subject = encodeURIComponent(`Punch List Item Assigned: ${item.trade}`);
       const body = encodeURIComponent(
         `You have been assigned a punch list item:\n\n` +
+        `Project: ${currentProject.name}\n` +
         `Trade: ${item.trade}\n` +
         `Location: ${item.location}\n` +
         `Description: ${item.description}\n\n` +
@@ -393,6 +457,11 @@ export default function PunchListApp() {
   const filteredItems = filterTrade === 'all' 
     ? items 
     : items.filter(item => item.trade === filterTrade);
+
+  // Get team members for the selected item's trade
+  const getTeamMembersForTrade = (trade) => {
+    return projectTeam.filter(member => member.trade === trade);
+  };
 
   // Auth screens
   if (!user || !profile) {
@@ -754,13 +823,22 @@ export default function PunchListApp() {
           </div>
           <div className="flex gap-2">
             {profile.role === 'gc' && currentProject && (
-              <button
-                onClick={() => setCurrentProject(null)}
-                className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
-                title="Back to projects"
-              >
-                <Folder className="w-5 h-5" />
-              </button>
+              <>
+                <button
+                  onClick={() => setShowTeamModal(true)}
+                  className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
+                  title="Manage team"
+                >
+                  <Users className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setCurrentProject(null)}
+                  className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
+                  title="Back to projects"
+                >
+                  <Folder className="w-5 h-5" />
+                </button>
+              </>
             )}
             <button
               onClick={signOut}
@@ -828,6 +906,9 @@ export default function PunchListApp() {
                     </div>
                     <h3 className="font-medium text-gray-900 mb-1">{item.description}</h3>
                     <p className="text-sm text-gray-600">{item.location}</p>
+                    {profile.role === 'sub' && item.projects && (
+                      <p className="text-xs text-gray-500 mt-1">Project: {item.projects.name}</p>
+                    )}
                   </div>
                 </div>
 
@@ -851,7 +932,12 @@ export default function PunchListApp() {
                   </button>
                   {profile.role === 'gc' && (
                     <button
-                      onClick={() => setAssignModal(item.id)}
+                      onClick={() => {
+                        setAssignModal(item.id);
+                        if (item.assigned_to) {
+                          setAssignEmail(item.assigned_to);
+                        }
+                      }}
                       className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
                     >
                       <UserPlus className="w-4 h-4" />
@@ -878,21 +964,154 @@ export default function PunchListApp() {
         </button>
       )}
 
+      {/* Team Management Modal */}
+      {showTeamModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Project Team</h2>
+              <button
+                onClick={() => setShowTeamModal(false)}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={addTeamMember} className="space-y-3 mb-6 p-4 bg-gray-50 rounded-lg">
+              <h3 className="font-medium text-sm text-gray-700">Add Team Member</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  placeholder="Name (optional)"
+                  value={newTeamMember.name}
+                  onChange={(e) => setNewTeamMember({ ...newTeamMember, name: e.target.value })}
+                  className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <input
+                  type="email"
+                  placeholder="Email *"
+                  required
+                  value={newTeamMember.email}
+                  onChange={(e) => setNewTeamMember({ ...newTeamMember, email: e.target.value })}
+                  className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <select
+                  required
+                  value={newTeamMember.trade}
+                  onChange={(e) => setNewTeamMember({ ...newTeamMember, trade: e.target.value })}
+                  className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select trade *</option>
+                  {trades.map(trade => (
+                    <option key={trade} value={trade}>{trade}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              >
+                Add Member
+              </button>
+            </form>
+
+            <div className="space-y-2">
+              <h3 className="font-medium text-sm text-gray-700 mb-3">Current Team ({projectTeam.length})</h3>
+              {projectTeam.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">No team members added yet</p>
+              ) : (
+                projectTeam.map(member => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        {member.name && (
+                          <span className="font-medium text-sm">{member.name}</span>
+                        )}
+                        <span className="text-sm text-gray-600">{member.email}</span>
+                      </div>
+                      <span className="text-xs text-gray-500 uppercase">{member.trade}</span>
+                    </div>
+                    <button
+                      onClick={() => removeTeamMember(member.id)}
+                      className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                      title="Remove member"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assignment Modal */}
       {assignModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <h2 className="text-xl font-bold mb-4">Assign Item</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Enter the email address of the subcontractor responsible for this item.
-            </p>
-            <input
-              type="email"
-              placeholder="contractor@example.com"
-              value={assignEmail}
-              onChange={(e) => setAssignEmail(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={assigning}
-            />
+            
+            {(() => {
+              const item = items.find(i => i.id === assignModal);
+              const teamMembers = getTeamMembersForTrade(item?.trade);
+              
+              return (
+                <>
+                  <p className="text-sm text-gray-600 mb-4">
+                    {teamMembers.length > 0 
+                      ? `Select a ${item.trade} team member or enter a new email:`
+                      : 'No team members added for this trade yet. Enter an email address:'}
+                  </p>
+
+                  {teamMembers.length > 0 && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Team Members
+                      </label>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {teamMembers.map(member => (
+                          <button
+                            key={member.id}
+                            type="button"
+                            onClick={() => setAssignEmail(member.email)}
+                            className={`w-full text-left p-3 border-2 rounded-lg transition-colors ${
+                              assignEmail === member.email
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="font-medium text-sm">{member.name || member.email}</div>
+                            {member.name && (
+                              <div className="text-xs text-gray-600">{member.email}</div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Or enter email manually
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="contractor@example.com"
+                      value={assignEmail}
+                      onChange={(e) => setAssignEmail(e.target.value)}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={assigning}
+                    />
+                  </div>
+                </>
+              );
+            })()}
+
             <div className="flex gap-3">
               <button
                 onClick={() => {
