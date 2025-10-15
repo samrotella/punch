@@ -1,5 +1,5 @@
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { getStatusLabel } from './statusHelpers';
 
 export const exportToPDF = async (items, projectName, filters = {}) => {
@@ -56,7 +56,7 @@ export const exportToPDF = async (items, projectName, filters = {}) => {
     new Date(item.created_at).toLocaleDateString()
   ]);
   
-  doc.autoTable({
+  autoTable(doc, {
     startY: filters.status !== 'all' || filters.trade !== 'all' ? 62 : 55,
     head: [['Status', 'Trade', 'Description', 'Location', 'Assigned To', 'Created']],
     body: tableData,
