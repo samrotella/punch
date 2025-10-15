@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail, LogOut, FolderPlus, Folder, Users, X, Search, ChevronUp, ChevronDown, Eye, Settings } from 'lucide-react';
+import { Camera, List, Plus, Check, Clock, AlertCircle, UserPlus, Filter, Mail, LogOut, FolderPlus, Folder, Users, X, Search, ChevronUp, ChevronDown, Eye, Settings, Download } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { 
   STATUSES, 
@@ -11,6 +11,7 @@ import {
   getStatusButtonLabel,
   canUpdateStatus
 } from './utils/statusHelpers';
+import { exportToPDF } from './utils/pdfExport';
 import AuthScreen from './components/Auth/AuthScreen';
 import { ProjectList, ProjectForm } from './components/Projects/ProjectViews';
 import TeamModal from './components/Team/TeamModal';
@@ -763,6 +764,14 @@ export default function PunchListApp() {
             {profile.role === 'gc' && currentProject && (
               <>
                 <button
+                  onClick={() => exportToPDF(filteredItems, currentProject?.name || 'Punch List', { status: filterStatus, trade: filterTrade })}
+                  className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
+                  title="Export PDF"
+                  disabled={filteredItems.length === 0}
+                >
+                  <Download className="w-5 h-5" />
+                </button>
+                <button
                   onClick={() => setShowTeamModal(true)}
                   className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
                   title="Manage team"
@@ -1024,14 +1033,24 @@ export default function PunchListApp() {
               {' • '}
               <span className="text-green-600">{filteredItems?.filter(i => i.status === STATUSES.COMPLETED).length || 0} completed</span>
             </div>
-            {selectedItems.length > 0 && (
+            <div className="flex gap-2">
+              {selectedItems.length > 0 && (
+                <button
+                  onClick={() => setShowBulkActions(!showBulkActions)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Bulk Actions ({selectedItems.length})
+                </button>
+              )}
               <button
-                onClick={() => setShowBulkActions(!showBulkActions)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                onClick={() => exportToPDF(filteredItems, currentProject?.name || 'Punch List', { status: filterStatus, trade: filterTrade })}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                disabled={filteredItems.length === 0}
               >
-                Bulk Actions ({selectedItems.length})
+                <Download className="w-4 h-4" />
+                Export PDF
               </button>
-            )}
+            </div>
           </div>
         </div>
 
