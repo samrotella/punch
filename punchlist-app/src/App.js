@@ -36,8 +36,6 @@ export default function PunchListApp() {
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [bulkAssignEmail, setBulkAssignEmail] = useState('');
-  const [showInviteCode, setShowInviteCode] = useState(false);
-  const [inviteCode, setInviteCode] = useState('');
   const [showSettings, setShowSettings] = useState(false);
 
   const [newItem, setNewItem] = useState({
@@ -158,8 +156,6 @@ export default function PunchListApp() {
       if (authError) throw authError;
 
       let companyId = null;
-      let createdNewCompany = false;
-      let newInviteCode = null;
 
       // Handle company logic for GC users
       if (formData.role === 'gc') {
@@ -178,7 +174,7 @@ export default function PunchListApp() {
           companyId = company.id;
         } else {
           // Create new company
-          newInviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+          const newInviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
           
           const { data: newCompany, error: companyError} = await supabase
             .from('companies')
@@ -194,7 +190,6 @@ export default function PunchListApp() {
           if (companyError) throw companyError;
 
           companyId = newCompany.id;
-          createdNewCompany = true;
         }
       }
 
@@ -214,12 +209,19 @@ export default function PunchListApp() {
 
       if (profileError) throw profileError;
 
-      // Show invite code modal if they created a new company
-      if (createdNewCompany && newInviteCode) {
-        setInviteCode(newInviteCode);
-        setShowInviteCode(true);
+      // Auto-login the user (works if email verification is disabled)
+      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      });
+
+      if (loginError) {
+        // Email verification might be required
+        alert('Account created! Please check your email to verify your account, then log in.');
       } else {
-        alert('Account created! Please check your email to verify your account.');
+        // Successfully logged in
+        setUser(loginData.user);
+        await loadProfile(loginData.user.id);
       }
     } catch (error) {
       alert(error.message);
