@@ -39,6 +39,7 @@ export default function PunchListApp() {
   const [showSettings, setShowSettings] = useState(false);
 
   const [newItem, setNewItem] = useState({
+    name: '',
     description: '',
     location: '',
     trade: '',
@@ -362,8 +363,8 @@ export default function PunchListApp() {
   };
 
   const createItem = async () => {
-    if (!newItem.description || !newItem.location || !newItem.trade) {
-      alert('Please fill in description, location, and trade');
+    if (!newItem.name || !newItem.location || !newItem.trade) {
+      alert('Please fill in name, location, and trade');
       return;
     }
 
@@ -385,6 +386,7 @@ export default function PunchListApp() {
         .from('punch_items')
         .insert([
           {
+            name: newItem.name,
             description: newItem.description,
             location: newItem.location,
             trade: newItem.trade,
@@ -403,6 +405,7 @@ export default function PunchListApp() {
       setItems([data[0], ...items]);
 
       setNewItem({
+        name: '',
         description: '',
         location: '',
         trade: '',
@@ -525,7 +528,8 @@ export default function PunchListApp() {
   if (searchQuery) {
     const query = searchQuery.toLowerCase();
     filteredItems = filteredItems.filter(item => 
-      item.description.toLowerCase().includes(query) ||
+      (item.name && item.name.toLowerCase().includes(query)) ||
+      (item.description && item.description.toLowerCase().includes(query)) ||
       item.location.toLowerCase().includes(query) ||
       item.trade.toLowerCase().includes(query) ||
       (item.assigned_to && item.assigned_to.toLowerCase().includes(query))
@@ -608,12 +612,27 @@ export default function PunchListApp() {
         <div className="p-4 max-w-2xl mx-auto space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description *
+              Item Name *
+            </label>
+            <input
+              type="text"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="e.g., Fix broken outlet"
+              maxLength={100}
+              value={newItem.name}
+              onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+              disabled={uploading}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description (Optional)
             </label>
             <textarea
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               rows="3"
-              placeholder="Describe the issue..."
+              placeholder="Add details about the issue..."
               value={newItem.description}
               onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
               disabled={uploading}
@@ -864,7 +883,10 @@ export default function PunchListApp() {
                         {item.trade}
                       </span>
                     </div>
-                    <h3 className="font-medium text-gray-900 mb-1">{item.description}</h3>
+                    <h3 className="font-medium text-gray-900 mb-1">{item.name || item.description}</h3>
+                    {item.description && item.name && (
+                      <p className="text-sm text-gray-600 mb-1">{item.description}</p>
+                    )}
                     <p className="text-sm text-gray-600">{item.location}</p>
                     {profile.role === 'sub' && item.projects && (
                       <p className="text-xs text-gray-500 mt-1">Project: {item.projects.name}</p>
@@ -1157,7 +1179,7 @@ export default function PunchListApp() {
                     </div>
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
+                    Item
                   </th>
                   <th 
                     className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -1220,7 +1242,10 @@ export default function PunchListApp() {
                       {item.trade}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900 max-w-xs">
-                      {item.description}
+                      <div className="font-medium">{item.name || item.description}</div>
+                      {item.description && item.name && (
+                        <div className="text-xs text-gray-600 mt-1">{item.description}</div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {item.location}

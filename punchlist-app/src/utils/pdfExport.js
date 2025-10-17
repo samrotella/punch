@@ -50,7 +50,7 @@ export const exportToPDF = async (items, projectName, filters = {}) => {
   const tableData = items.map(item => [
     getStatusLabel(item.status),
     item.trade,
-    item.description,
+    item.name || item.description,
     item.location,
     item.assigned_to || '-',
     new Date(item.created_at).toLocaleDateString()
@@ -58,7 +58,7 @@ export const exportToPDF = async (items, projectName, filters = {}) => {
   
   autoTable(doc, {
     startY: filters.status !== 'all' || filters.trade !== 'all' ? 62 : 55,
-    head: [['Status', 'Trade', 'Description', 'Location', 'Assigned To', 'Created']],
+    head: [['Status', 'Trade', 'Item', 'Location', 'Assigned To', 'Created']],
     body: tableData,
     theme: 'striped',
     headStyles: {
