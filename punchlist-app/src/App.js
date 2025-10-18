@@ -37,6 +37,7 @@ export default function PunchListApp() {
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [bulkAssignEmail, setBulkAssignEmail] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [selectedItemDetail, setSelectedItemDetail] = useState(null);
 
   const [newItem, setNewItem] = useState({
     name: '',
@@ -883,7 +884,12 @@ export default function PunchListApp() {
                         {item.trade}
                       </span>
                     </div>
-                    <h3 className="font-medium text-gray-900 mb-1">{item.name || item.description}</h3>
+                    <h3 
+                      className="font-medium text-gray-900 mb-1 cursor-pointer hover:text-blue-600 transition-colors"
+                      onClick={() => setSelectedItemDetail(item)}
+                    >
+                      {item.name || item.description}
+                    </h3>
                     {item.description && item.name && (
                       <p className="text-sm text-gray-600 mb-1">{item.description}</p>
                     )}
@@ -1242,7 +1248,12 @@ export default function PunchListApp() {
                       {item.trade}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900 max-w-xs">
-                      <div className="font-medium">{item.name || item.description}</div>
+                      <div 
+                        className="font-medium cursor-pointer hover:text-blue-600 transition-colors"
+                        onClick={() => setSelectedItemDetail(item)}
+                      >
+                        {item.name || item.description}
+                      </div>
                       {item.description && item.name && (
                         <div className="text-xs text-gray-600 mt-1">{item.description}</div>
                       )}
@@ -1316,6 +1327,118 @@ export default function PunchListApp() {
             onClose={() => setShowSettings(false)}
           />
         </>
+      )}
+
+      {/* Item Detail Modal */}
+      {selectedItemDetail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex justify-between items-start">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-2">
+                  {getStatusIcon(selectedItemDetail.status)}
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(selectedItemDetail.status)}`}>
+                    {getStatusLabel(selectedItemDetail.status)}
+                  </span>
+                  <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium uppercase">
+                    {selectedItemDetail.trade}
+                  </span>
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {selectedItemDetail.name || selectedItemDetail.description}
+                </h2>
+              </div>
+              <button
+                onClick={() => setSelectedItemDetail(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-6">
+              {/* Photo */}
+              {selectedItemDetail.photo_url && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Photo</label>
+                  <img 
+                    src={selectedItemDetail.photo_url} 
+                    alt="Issue" 
+                    className="w-full rounded-lg shadow-lg cursor-pointer hover:opacity-95 transition-opacity"
+                    onClick={() => window.open(selectedItemDetail.photo_url, '_blank')}
+                  />
+                  <p className="text-xs text-gray-500 mt-2 text-center">Click to view full size</p>
+                </div>
+              )}
+
+              {/* Description */}
+              {selectedItemDetail.description && selectedItemDetail.name && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <p className="text-gray-900 bg-gray-50 p-4 rounded-lg">{selectedItemDetail.description}</p>
+                </div>
+              )}
+
+              {/* Location */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
+                <p className="text-gray-900">{selectedItemDetail.location}</p>
+              </div>
+
+              {/* Assigned To */}
+              {selectedItemDetail.assigned_to && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Assigned To</label>
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-blue-600" />
+                    <span className="text-gray-900">{selectedItemDetail.assigned_to}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Created</label>
+                  <p className="text-gray-900">{new Date(selectedItemDetail.created_at).toLocaleDateString()}</p>
+                </div>
+                {selectedItemDetail.assigned_at && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Assigned</label>
+                    <p className="text-gray-900">{new Date(selectedItemDetail.assigned_at).toLocaleDateString()}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Button */}
+              {canUpdateStatus(selectedItemDetail.status, profile.role) && (
+                <div className="pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => {
+                      toggleStatus(selectedItemDetail.id, selectedItemDetail.status);
+                      setSelectedItemDetail(null);
+                    }}
+                    className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    {getStatusButtonLabel(selectedItemDetail.status, profile.role)}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-4">
+              <button
+                onClick={() => setSelectedItemDetail(null)}
+                className="w-full py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
