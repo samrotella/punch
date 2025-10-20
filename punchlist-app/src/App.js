@@ -28,7 +28,7 @@ export default function PunchListApp() {
   const [view, setView] = useState('list');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [filterTrade, setFilterTrade] = useState('all');
+  const [filterTrade, setFilterTrade] = useState([]);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItems, setSelectedItems] = useState([]);
@@ -39,6 +39,7 @@ export default function PunchListApp() {
   const [bulkAssignEmail, setBulkAssignEmail] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [selectedItemDetail, setSelectedItemDetail] = useState(null);
+  const [showTradeFilter, setShowTradeFilter] = useState(false);
 
   const [newItem, setNewItem] = useState({
     name: '',
@@ -74,6 +75,19 @@ export default function PunchListApp() {
       loadProjectTeam();
     }
   }, [currentProject]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showTradeFilter && !event.target.closest('.trade-filter-container')) {
+        setShowTradeFilter(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showTradeFilter]);
 
   const checkUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -463,11 +477,23 @@ export default function PunchListApp() {
     }
   };
 
+  const toggleTradeFilter = (trade) => {
+    if (filterTrade.includes(trade)) {
+      setFilterTrade(filterTrade.filter(t => t !== trade));
+    } else {
+      setFilterTrade([...filterTrade, trade]);
+    }
+  };
+
+  const clearTradeFilter = () => {
+    setFilterTrade([]);
+  };
+
   // Apply filters and search
   let filteredItems = items || [];
-  
-  if (filterTrade !== 'all') {
-    filteredItems = filteredItems.filter(item => item.trade === filterTrade);
+
+  if (filterTrade.length > 0) {
+    filteredItems = filteredItems.filter(item => filterTrade.includes(item.trade));
   }
   
   if (filterStatus !== 'all') {
@@ -849,16 +875,51 @@ export default function PunchListApp() {
             <option value={STATUSES.READY_FOR_REVIEW}>Ready for Review</option>
             <option value={STATUSES.COMPLETED}>Completed</option>
           </select>
-          <select
-            value={filterTrade}
-            onChange={(e) => setFilterTrade(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Trades</option>
-            {trades.map(trade => (
-              <option key={trade} value={trade}>{trade}</option>
-            ))}
-          </select>
+          <div className="relative trade-filter-container">
+            <button
+              onClick={() => setShowTradeFilter(!showTradeFilter)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:bg-gray-50 transition-colors min-w-[150px] text-left flex items-center justify-between"
+            >
+              <span className="text-gray-700">
+                {filterTrade.length === 0 ? 'All Trades' : `${filterTrade.length} Trade${filterTrade.length > 1 ? 's' : ''}`}
+              </span>
+              <Filter className="w-4 h-4 text-gray-500" />
+            </button>
+            {showTradeFilter && (
+              <div className="absolute top-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-20 min-w-[200px]">
+                <div className="p-2 border-b border-gray-200 flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Select Trades</span>
+                  {filterTrade.length > 0 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearTradeFilter();
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-64 overflow-y-auto p-2">
+                  {trades.map(trade => (
+                    <label
+                      key={trade}
+                      className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={filterTrade.includes(trade)}
+                        onChange={() => toggleTradeFilter(trade)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">{trade}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {showBulkActions && (
