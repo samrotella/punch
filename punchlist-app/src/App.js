@@ -1123,7 +1123,7 @@ export default function PunchListApp() {
 
       {/* Team Management Modal */}
       {showTeamModal && (
-        <TeamModal 
+        <TeamModal
           projectTeam={projectTeam}
           trades={trades}
           onClose={() => setShowTeamModal(false)}
@@ -1134,7 +1134,7 @@ export default function PunchListApp() {
 
       {/* Settings Page */}
       {showSettings && (
-        <SettingsPage 
+        <SettingsPage
           profile={profile}
           onClose={() => setShowSettings(false)}
         />
@@ -1152,6 +1152,143 @@ export default function PunchListApp() {
           onToggleStatus={toggleStatus}
           onNavigate={setSelectedItemDetail}
         />
+      )}
+
+      {/* New Item Modal for Desktop */}
+      {view === 'create' && (
+        <div className="hidden md:block fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900">New Punch Item</h2>
+              <button
+                onClick={() => setView('list')}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={uploading}
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Item Name *
+                </label>
+                <input
+                  type="text"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., Fix broken outlet"
+                  maxLength={100}
+                  value={newItem.name}
+                  onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                  disabled={uploading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description (Optional)
+                </label>
+                <textarea
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  rows="3"
+                  placeholder="Add details about the issue..."
+                  value={newItem.description}
+                  onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                  disabled={uploading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Location *
+                </label>
+                <input
+                  type="text"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Room 101, Hallway, etc."
+                  value={newItem.location}
+                  onChange={(e) => setNewItem({ ...newItem, location: e.target.value })}
+                  disabled={uploading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Trade *
+                </label>
+                <select
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={newItem.trade}
+                  onChange={(e) => setNewItem({ ...newItem, trade: e.target.value })}
+                  disabled={uploading}
+                >
+                  <option value="">Select trade...</option>
+                  {trades.map(trade => (
+                    <option key={trade} value={trade}>{trade}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Photo (Optional)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setNewItem({ ...newItem, photo: reader.result, photoFile: file });
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="hidden"
+                  disabled={uploading}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-blue-500 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                  disabled={uploading}
+                >
+                  <Camera className="w-8 h-8 text-gray-400 mb-2" />
+                  <span className="text-sm text-gray-600">
+                    {newItem.photo ? 'Change Photo' : 'Upload Photo'}
+                  </span>
+                </button>
+                {newItem.photo && (
+                  <img
+                    src={newItem.photo}
+                    alt="Preview"
+                    className="mt-3 w-full rounded-lg shadow-md"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex gap-3 justify-end">
+              <button
+                onClick={() => setView('list')}
+                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors disabled:opacity-50"
+                disabled={uploading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createItem}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                disabled={uploading}
+              >
+                {uploading ? 'Saving...' : 'Save Item'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
