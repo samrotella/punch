@@ -300,13 +300,13 @@ export default function PunchListApp() {
       if (newItem.photoFile) {
         const fileName = `${currentProject.id}/${Date.now()}.jpg`;
         const { error: uploadError } = await supabase.storage
-          .from('punch_photos')
+          .from('punch-photos')
           .upload(fileName, newItem.photoFile);
 
         if (uploadError) throw uploadError;
 
         const { data } = supabase.storage
-          .from('punch_photos')
+          .from('punch-photos')
           .getPublicUrl(fileName);
 
         photoUrl = data.publicUrl;
