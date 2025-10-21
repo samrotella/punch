@@ -286,6 +286,22 @@ export default function PunchListApp() {
     }
   };
 
+  // Helper function to auto-assign based on trade
+  const getAutoAssignedMember = (trade) => {
+    const member = projectTeam.find(m => m.trade === trade);
+    return member ? member.email : '';
+  };
+
+  // Handle trade change with auto-assignment
+  const handleTradeChange = (trade) => {
+    const assignedEmail = getAutoAssignedMember(trade);
+    setNewItem({ 
+      ...newItem, 
+      trade, 
+      assignedTo: assignedEmail 
+    });
+  };
+
   const createItem = async () => {
     if (!newItem.name || !newItem.location || !newItem.trade) {
       alert('Please fill in all required fields');
@@ -323,7 +339,9 @@ export default function PunchListApp() {
             trade: newItem.trade,
             status: STATUSES.OPEN,
             photo_url: photoUrl,
-            created_by: user.id
+            created_by: user.id,
+            assigned_to: newItem.assignedTo || null,
+            assigned_at: newItem.assignedTo ? new Date().toISOString() : null
           }
         ])
         .select()
@@ -636,12 +654,31 @@ export default function PunchListApp() {
               <select
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 value={newItem.trade}
-                onChange={(e) => setNewItem({ ...newItem, trade: e.target.value })}
+                onChange={(e) => handleTradeChange(e.target.value)}
                 disabled={uploading}
               >
                 <option value="">Select trade...</option>
                 {trades.map(trade => (
                   <option key={trade} value={trade}>{trade}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Assigned To (Optional)
+              </label>
+              <select
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={newItem.assignedTo}
+                onChange={(e) => setNewItem({ ...newItem, assignedTo: e.target.value })}
+                disabled={uploading}
+              >
+                <option value="">Unassigned</option>
+                {projectTeam.map(member => (
+                  <option key={member.id} value={member.email}>
+                    {member.name ? `${member.name} (${member.email})` : member.email}
+                  </option>
                 ))}
               </select>
             </div>
@@ -742,7 +779,7 @@ export default function PunchListApp() {
                 <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-500 text-lg mb-2">No punch items yet</p>
                 <p className="text-gray-400 text-sm">
-                  {profile.role === 'gc' ? 'Tap the + button to add your first item' : 'No items assigned to you yet'}
+                  {profile.role === 'gc' ? 'Create your first punch item to get started' : 'No items assigned to you yet'}
                 </p>
               </div>
             ) : (
@@ -750,29 +787,40 @@ export default function PunchListApp() {
                 {filteredItems.map(item => (
                   <div
                     key={item.id}
-                    className={`${getStatusColor(item.status)} border-2 rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md transition-shadow`}
                     onClick={() => setSelectedItemDetail(item)}
+                    className={`bg-white rounded-lg shadow-sm p-4 border-2 ${getStatusColor(item.status)} cursor-pointer hover:shadow-md transition-shadow`}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           {getStatusIcon(item.status)}
-                          <span className="text-xs font-medium text-gray-600 uppercase">
-                            {item.trade}
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadge(item.status)}`}>
+                            {getStatusLabel(item.status)}
                           </span>
                         </div>
-                        <h3 className="font-medium text-gray-900 mb-1">
+                        <h3 className="font-semibold text-gray-900">
                           {item.name || item.description}
                         </h3>
-                        {item.description && item.name && (
-                          <p className="text-sm text-gray-600 mb-1">{item.description}</p>
-                        )}
-                        <p className="text-sm text-gray-600">{item.location}</p>
+                      </div>
+                    </div>
+
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Trade:</span>
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                          {item.trade}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Location:</span> {item.location}
+                      </div>
+                      <div>
+                        <span className="font-medium">Created:</span> {new Date(item.created_at).toLocaleDateString()}
                       </div>
                     </div>
 
                     {item.assigned_to && (
-                      <div className="flex items-center gap-2 mt-2 p-2 bg-white rounded border border-gray-200">
+                      <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
                         <Mail className="w-4 h-4 text-blue-600" />
                         <span className="text-sm text-gray-700">Assigned to: {item.assigned_to}</span>
                       </div>
@@ -854,54 +902,42 @@ export default function PunchListApp() {
 
       <div className="max-w-7xl mx-auto p-6">
         <div className="bg-white rounded-lg shadow-sm p-4 mb-4 flex gap-4 items-center flex-wrap">
-          <div className="flex-1 relative min-w-xs">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
               placeholder="Search items..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Status</option>
-            <option value={STATUSES.OPEN}>Open</option>
-            <option value={STATUSES.IN_PROGRESS}>In Progress</option>
-            <option value={STATUSES.READY_FOR_REVIEW}>Ready for Review</option>
-            <option value={STATUSES.COMPLETED}>Completed</option>
-          </select>
+
           <div className="relative trade-filter-container">
             <button
               onClick={() => setShowTradeFilter(!showTradeFilter)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:bg-gray-50 transition-colors min-w-[150px] text-left flex items-center justify-between"
+              className={`px-4 py-2 border rounded-lg flex items-center gap-2 ${
+                filterTrade.length > 0 ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'
+              }`}
             >
-              <span className="text-gray-700">
-                {filterTrade.length === 0 ? 'All Trades' : `${filterTrade.length} Trade${filterTrade.length > 1 ? 's' : ''}`}
-              </span>
-              <Filter className="w-4 h-4 text-gray-500" />
+              <Filter className="w-4 h-4" />
+              Trade {filterTrade.length > 0 && `(${filterTrade.length})`}
             </button>
+            
             {showTradeFilter && (
-              <div className="absolute top-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-20 min-w-[200px]">
-                <div className="p-2 border-b border-gray-200 flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">Select Trades</span>
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                <div className="p-2 border-b border-gray-200 flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">Filter by Trade</span>
                   {filterTrade.length > 0 && (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        clearTradeFilter();
-                      }}
+                      onClick={clearTradeFilter}
                       className="text-xs text-blue-600 hover:text-blue-800"
                     >
-                      Clear All
+                      Clear
                     </button>
                   )}
                 </div>
-                <div className="max-h-64 overflow-y-auto p-2">
+                <div className="p-2 max-h-64 overflow-y-auto">
                   {trades.map(trade => (
                     <label
                       key={trade}
@@ -920,66 +956,122 @@ export default function PunchListApp() {
               </div>
             )}
           </div>
+
+          <select
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="all">All Status</option>
+            <option value={STATUSES.OPEN}>Open</option>
+            <option value={STATUSES.IN_PROGRESS}>In Progress</option>
+            <option value={STATUSES.READY_FOR_REVIEW}>Ready for Review</option>
+            <option value={STATUSES.COMPLETED}>Completed</option>
+          </select>
+
+          {profile.role === 'gc' && (
+            <button
+              onClick={() => exportToPDF(filteredItems, currentProject?.name || 'Assigned Items', { status: filterStatus, trade: filterTrade })}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export PDF
+            </button>
+          )}
         </div>
 
-        {showBulkActions && (
-          <div className="bg-white rounded-lg shadow-sm p-4 mb-4 flex gap-2 items-center flex-wrap">
-            <select
-              value={bulkAssignEmail}
-              onChange={(e) => setBulkAssignEmail(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Assign to...</option>
-              {projectTeam.map(member => (
-                <option key={member.id} value={member.email}>
-                  {member.name ? `${member.name} (${member.email})` : member.email}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={bulkAssign}
-              disabled={!bulkAssignEmail}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              Assign
-            </button>
-            <div className="border-l border-gray-300 h-8"></div>
-            <button
-              onClick={() => bulkUpdateStatus(STATUSES.IN_PROGRESS)}
-              className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
-            >
-              Mark In Progress
-            </button>
-            <button
-              onClick={() => bulkUpdateStatus(STATUSES.READY_FOR_REVIEW)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Mark Ready for Review
-            </button>
-            <button
-              onClick={() => bulkUpdateStatus(STATUSES.COMPLETED)}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              Mark Completed
-            </button>
-            <button
-              onClick={() => {
-                setSelectedItems([]);
-                setShowBulkActions(false);
-              }}
-              className="ml-auto px-4 py-2 text-gray-600 hover:text-gray-900"
-            >
-              Cancel
-            </button>
+        {selectedItems.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between">
+              <span className="text-blue-900 font-medium">
+                {selectedItems.length} item(s) selected
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowBulkActions(!showBulkActions)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Actions
+                </button>
+                <button
+                  onClick={() => setSelectedItems([])}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            {showBulkActions && (
+              <div className="mt-4 pt-4 border-t border-blue-200 space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Assign to:
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      className="flex-1 p-2 border border-gray-300 rounded-lg"
+                      value={bulkAssignEmail}
+                      onChange={(e) => setBulkAssignEmail(e.target.value)}
+                    >
+                      <option value="">Select team member...</option>
+                      {projectTeam.map(member => (
+                        <option key={member.id} value={member.email}>
+                          {member.name ? `${member.name} (${member.email})` : member.email}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={bulkAssign}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Assign
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Change status to:
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => bulkUpdateStatus(STATUSES.OPEN)}
+                      className="px-4 py-2 bg-red-100 text-red-800 rounded-lg hover:bg-red-200 transition-colors"
+                    >
+                      Open
+                    </button>
+                    <button
+                      onClick={() => bulkUpdateStatus(STATUSES.IN_PROGRESS)}
+                      className="px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors"
+                    >
+                      In Progress
+                    </button>
+                    <button
+                      onClick={() => bulkUpdateStatus(STATUSES.READY_FOR_REVIEW)}
+                      className="px-4 py-2 bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 transition-colors"
+                    >
+                      Ready for Review
+                    </button>
+                    <button
+                      onClick={() => bulkUpdateStatus(STATUSES.COMPLETED)}
+                      className="px-4 py-2 bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors"
+                    >
+                      Completed
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {filteredItems.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+          <div className="text-center py-12 bg-white rounded-lg shadow-sm">
             <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg mb-2">No items found</p>
+            <p className="text-gray-500 text-lg mb-2">No punch items found</p>
             <p className="text-gray-400 text-sm">
-              {profile.role === 'gc' ? 'Click "New Item" to add your first punch list item' : 'No items assigned to you yet'}
+              {profile.role === 'gc' ? 'Create your first punch item to get started' : 'No items assigned to you yet'}
             </p>
           </div>
         ) : (
@@ -991,48 +1083,71 @@ export default function PunchListApp() {
                     <th className="px-4 py-3 text-left">
                       <input
                         type="checkbox"
-                        checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
+                        checked={selectedItems.length === filteredItems.length}
                         onChange={toggleSelectAll}
                         className="rounded border-gray-300"
                       />
                     </th>
                   )}
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Icon</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Trade</th>
-                  <th 
-                    className="px-4 py-3 text-left text-sm font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('name')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Item
-                      {sortField === 'name' && (
+                  <th className="px-4 py-3 text-left">
+                    <button
+                      onClick={() => handleSort('status')}
+                      className="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900"
+                    >
+                      Status
+                      {sortField === 'status' && (
                         sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
                       )}
-                    </div>
+                    </button>
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Location</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Assigned To</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Photo</th>
-                  <th 
-                    className="px-4 py-3 text-left text-sm font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('created_at')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Date
+                  <th className="px-4 py-3 text-left">
+                    <button
+                      onClick={() => handleSort('trade')}
+                      className="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900"
+                    >
+                      Trade
+                      {sortField === 'trade' && (
+                        sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">
+                    Item
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">
+                    Location
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">
+                    Assigned To
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">
+                    Photo
+                  </th>
+                  <th className="px-4 py-3 text-left">
+                    <button
+                      onClick={() => handleSort('created_at')}
+                      className="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900"
+                    >
+                      Created
                       {sortField === 'created_at' && (
                         sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
                       )}
-                    </div>
+                    </button>
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Action</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">
+                    Action
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredItems.map(item => (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                  <tr 
+                    key={item.id} 
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => setSelectedItemDetail(item)}
+                  >
                     {profile.role === 'gc' && (
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selectedItems.includes(item.id)}
@@ -1042,33 +1157,26 @@ export default function PunchListApp() {
                             } else {
                               setSelectedItems(selectedItems.filter(id => id !== item.id));
                             }
-                            if (selectedItems.length > 0 || e.target.checked) {
-                              setShowBulkActions(true);
-                            }
                           }}
                           className="rounded border-gray-300"
                         />
                       </td>
                     )}
                     <td className="px-4 py-3">
-                      {getStatusIcon(item.status)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(item.status)}`}>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusBadge(item.status)}`}>
                         {getStatusLabel(item.status)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                      {item.trade}
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                        {item.trade}
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 max-w-xs">
-                      <div 
-                        className="font-medium cursor-pointer hover:text-blue-600 transition-colors"
-                        onClick={() => setSelectedItemDetail(item)}
-                      >
+                    <td className="px-4 py-3">
+                      <div className="text-sm font-medium text-gray-900">
                         {item.name || item.description}
                       </div>
-                      {item.description && item.name && (
+                      {item.name && item.description && (
                         <div className="text-xs text-gray-600 mt-1">{item.description}</div>
                       )}
                     </td>
@@ -1220,12 +1328,31 @@ export default function PunchListApp() {
                 <select
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   value={newItem.trade}
-                  onChange={(e) => setNewItem({ ...newItem, trade: e.target.value })}
+                  onChange={(e) => handleTradeChange(e.target.value)}
                   disabled={uploading}
                 >
                   <option value="">Select trade...</option>
                   {trades.map(trade => (
                     <option key={trade} value={trade}>{trade}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Assigned To (Optional)
+                </label>
+                <select
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={newItem.assignedTo}
+                  onChange={(e) => setNewItem({ ...newItem, assignedTo: e.target.value })}
+                  disabled={uploading}
+                >
+                  <option value="">Unassigned</option>
+                  {projectTeam.map(member => (
+                    <option key={member.id} value={member.email}>
+                      {member.name ? `${member.name} (${member.email})` : member.email}
+                    </option>
                   ))}
                 </select>
               </div>
