@@ -432,6 +432,25 @@ export default function PunchListApp() {
     }
   };
 
+  const deleteItem = async (itemId) => {
+    try {
+      const { error } = await supabase
+        .from('punch_items')
+        .delete()
+        .eq('id', itemId);
+
+      if (error) throw error;
+
+      // Update local state
+      setItems(items.filter(item => item.id !== itemId));
+      
+      // Clear selected item detail
+      setSelectedItemDetail(null);
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const toggleStatus = async (itemId, currentStatus) => {
     try {
       const nextStatus = getNextStatus(currentStatus, profile.role);
@@ -1342,6 +1361,7 @@ export default function PunchListApp() {
           onToggleStatus={toggleStatus}
           onNavigate={setSelectedItemDetail}
           onUpdate={updateItem}
+          onDelete={deleteItem}
         />
       )}
 

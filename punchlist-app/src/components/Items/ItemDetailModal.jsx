@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Mail, Edit2, Camera } from 'lucide-react';
+import { X, Mail, Edit2, Camera, Trash2 } from 'lucide-react';
 import {
   getStatusIcon,
   getStatusBadge,
@@ -19,9 +19,11 @@ export default function ItemDetailModal({
   onClose,
   onToggleStatus,
   onNavigate,
-  onUpdate
+  onUpdate,
+  onDelete
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editForm, setEditForm] = useState({
     name: item.name || '',
     description: item.description || '',
@@ -33,6 +35,7 @@ export default function ItemDetailModal({
     existingPhotoUrl: item.photo_url || null
   });
   const [updating, setUpdating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef(null);
 
   const hasPrevious = currentIndex > 0;
@@ -99,14 +102,25 @@ export default function ItemDetailModal({
     setIsEditing(false);
   };
 
-  // Only GCs can edit items
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await onDelete(item.id);
+      onClose();
+    } catch (error) {
+      alert('Failed to delete item: ' + error.message);
+      setDeleting(false);
+    }
+  };
+
+  // Only GCs can edit and delete items
   const canEdit = profile.role === 'gc';
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
         {/* Previous Button */}
-        {hasPrevious && !isEditing && (
+        {hasPrevious && !isEditing && !showDeleteConfirm && (
           <button
             onClick={handlePrevious}
             className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white rounded-lg shadow-lg hover:bg-gray-100 transition-colors"
@@ -125,7 +139,7 @@ export default function ItemDetailModal({
         )}
 
         {/* Next Button */}
-        {hasNext && !isEditing && (
+        {hasNext && !isEditing && !showDeleteConfirm && (
           <button
             onClick={handleNext}
             className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white rounded-lg shadow-lg hover:bg-gray-100 transition-colors"
@@ -141,6 +155,37 @@ export default function ItemDetailModal({
               d="M9 5l7 7-7 7"
             />
           </button>
+        )}
+
+        {/* Delete Confirmation Dialog */}
+        {showDeleteConfirm && (
+          <div className="absolute inset-0 bg-white rounded-lg z-20 flex items-center justify-center p-6">
+            <div className="text-center max-w-md">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Item?</h3>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete "{item.name || item.description}"? This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="flex-1 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                  disabled={deleting}
+                >
+                  {deleting ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Header */}
@@ -173,19 +218,29 @@ export default function ItemDetailModal({
             )}
           </div>
           <div className="flex gap-2">
-            {canEdit && !isEditing && (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors flex items-center gap-1"
-                title="Edit item"
-              >
-                <Edit2 className="w-5 h-5" />
-              </button>
+            {canEdit && !isEditing && !showDeleteConfirm && (
+              <>
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors flex items-center gap-1"
+                  title="Edit item"
+                >
+                  <Edit2 className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors flex items-center gap-1"
+                  title="Delete item"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </>
             )}
             <button
               onClick={isEditing ? handleCancelEdit : onClose}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
               title={isEditing ? 'Cancel' : 'Close (Esc)'}
+              disabled={showDeleteConfirm}
             >
               <X className="w-5 h-5" />
             </button>
