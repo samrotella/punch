@@ -368,6 +368,69 @@ export default function PunchListApp() {
     }
   };
 
+  const updateItem = async (itemId, editForm) => {
+    try {
+      let photoUrl = editForm.existingPhotoUrl;
+
+      // Upload new photo if one was selected
+      if (editForm.photoFile) {
+        const fileName = `${currentProject.id}/${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('punch-photos')
+          .upload(fileName, editForm.photoFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage
+          .from('punch-photos')
+          .getPublicUrl(fileName);
+
+        photoUrl = data.publicUrl;
+      }
+
+      const updateData = {
+        name: editForm.name,
+        description: editForm.description,
+        location: editForm.location,
+        trade: editForm.trade,
+        assigned_to: editForm.assignedTo || null,
+        updated_at: new Date().toISOString()
+      };
+
+      // Only update assigned_at if assignment changed
+      const oldItem = items.find(i => i.id === itemId);
+      if (editForm.assignedTo && editForm.assignedTo !== oldItem.assigned_to) {
+        updateData.assigned_at = new Date().toISOString();
+      } else if (!editForm.assignedTo) {
+        updateData.assigned_at = null;
+      }
+
+      // Only update photo_url if it changed
+      if (photoUrl !== editForm.existingPhotoUrl) {
+        updateData.photo_url = photoUrl;
+      }
+
+      const { data, error } = await supabase
+        .from('punch_items')
+        .update(updateData)
+        .eq('id', itemId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update local state
+      setItems(items.map(item => item.id === itemId ? data : item));
+      
+      // Update selected item detail if it's the one being edited
+      if (selectedItemDetail && selectedItemDetail.id === itemId) {
+        setSelectedItemDetail(data);
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const toggleStatus = async (itemId, currentStatus) => {
     try {
       const nextStatus = getNextStatus(currentStatus, profile.role);
@@ -1256,9 +1319,12 @@ export default function PunchListApp() {
           totalItems={filteredItems.length}
           filteredItems={filteredItems}
           profile={profile}
+          projectTeam={projectTeam}
+          trades={trades}
           onClose={() => setSelectedItemDetail(null)}
           onToggleStatus={toggleStatus}
           onNavigate={setSelectedItemDetail}
+          onUpdate={updateItem}
         />
       )}
 
